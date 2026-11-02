@@ -10,7 +10,7 @@
  * - 移动力 MOV：STR 与 DEX 均小于 SIZ 时为 7；任一属性 ≥ SIZ 时为 8；两者均大于 SIZ 时为 9
  * - 伤害加值 DB / 体格 Build 由 STR+SIZ 查表
  *
- * 示例角色采用符合规则的静态值，便于第一阶段直接预览档案结构。
+ * 示例角色采用符合规则的静态值，便于直接预览档案结构。
  */
 
 export function createSampleCharacters() {
@@ -26,6 +26,7 @@ export function createSampleCharacters() {
       age: 28,
       gender: '女',
       occupation: '调查记者',
+      occupationId: 'reporter',
       nationality: '中国',
       appearance:
         '短发总被雨打湿，右手虎口有一道旧墨痕。常穿一件洗得发白的风衣，口袋里塞着三支不同颜色的笔。',
@@ -88,7 +89,7 @@ export function createSampleCharacters() {
       occupationPoints: 160,
       interestPoints: 140,
       pointsSpent: { occupation: 160, interest: 140 },
-      notes: '示例角色 · 可在第二阶段直接进入车卡工坊修改。',
+      notes: '示例角色 · 可进入车卡工坊直接修改。',
       portrait: null,
       createdAt: stamp,
       updatedAt: stamp,
@@ -102,6 +103,7 @@ export function createSampleCharacters() {
       age: 36,
       gender: '男',
       occupation: '外科医生',
+      occupationId: 'doctor',
       nationality: '中国',
       appearance:
         '身形清瘦，戴一副圆框眼镜，白大褂下永远穿着熨得笔挺的衬衫。左手无名指有一道无法完全弯曲的旧伤。',
@@ -164,7 +166,7 @@ export function createSampleCharacters() {
       occupationPoints: 170,
       interestPoints: 150,
       pointsSpent: { occupation: 170, interest: 150 },
-      notes: '示例角色 · 可在第二阶段直接进入车卡工坊修改。',
+      notes: '示例角色 · 可进入车卡工坊直接修改。',
       portrait: null,
       createdAt: stamp,
       updatedAt: stamp,

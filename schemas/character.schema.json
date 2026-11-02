@@ -30,6 +30,7 @@
     "age": { "type": "integer", "minimum": 15, "maximum": 120 },
     "gender": { "type": "string", "maxLength": 40 },
     "occupation": { "type": "string", "maxLength": 80 },
+    "occupationId": { "type": "string", "maxLength": 80 },
     "nationality": { "type": "string", "maxLength": 80 },
     "appearance": { "type": "string", "maxLength": 4000 },
     "heightCm": { "type": "number", "minimum": 0, "maximum": 300 },

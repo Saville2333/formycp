@@ -1,6 +1,6 @@
 # Cthulhu Table 数据模型
 
-> 版本：第一阶段 · schemaVersion = 1  
+> 版本：v1.0.0 · schemaVersion = 1  
 > 所有 JSON Schema 位于 [`schemas/`](../schemas/)，采用 Draft 2020-12。  
 > 数据只保存在当前浏览器：轻量数据进 localStorage，模组长文本/聊天/存档进 IndexedDB。
 
@@ -31,20 +31,21 @@ Character
 ├── 幸运：luck
 ├── 衍生：derived { hp{current,max}, mp{...}, san{...}, mov, db, build }
 ├── 技能：skills[{ name, base, occupation, interest, total, checked }]
-├── 车卡：creditRating / occupationPoints / interestPoints / pointsSpent
+├── 车卡：occupationId / creditRating / occupationPoints / interestPoints / pointsSpent
 └── 元数据：npcDetails? / notes / portrait / createdAt / updatedAt
 ```
 
-第一阶段已经用两份示例角色验证了这份结构；第二阶段会加入严格校验：
+`character.js` 对这份结构执行严格校验：
 
 - 八属性范围 1–99；
 - `occupation + interest + base` 与 `total` 一致；
 - 职业点、兴趣点分别不超过 `EDU×2`、`INT×2`；
+- 职业点仅能用于本职技能（信用评级例外，始终计入职业点）；
 - 信用评级落在职业模板给出的区间；
 - 年龄修正后再核对 MOV/EDU 等派生值；
 - 技能不超过 99（除非规则/模组明确允许）。
 
-### 规则口径（第二阶段实现时使用）
+### 规则口径（已在 character.js 中实现）
 
 | 项目 | 公式/查表 | 出处 |
 | --- | --- | --- |
@@ -85,7 +86,7 @@ DB / Build 查表（STR + SIZ）：
 | 70–79 | −40 | +40 | −4 |
 | 80+ | −80 | +80 | −5 |
 
-> 精确实现与边界测试会在第二阶段落地，并写入 `character.js` 的规则注释。
+> 上述规则已在 `character.js` 中实现，并通过年龄、MOV、DB/Build、技能点边界测试。
 
 ## 3. 模组 `module.schema.json`
 
@@ -181,6 +182,8 @@ Settings
 | --- | --- |
 | `cthulhu-table:settings:v1` | `Settings` |
 | `cthulhu-table:characters:v1` | `{ schemaVersion, items: { [id]: Character } }` |
+| `cthulhu-table:campaigns:v1` | `{ schemaVersion, items: { [id]: Session } }` |
+| `cthulhu-table:active-campaign:v1` | 当前战役 id |
 | `cthulhu-table:ui:v1` | 预留：滚动位置、折叠状态等纯界面偏好 |
 
 ## 8. IndexedDB 对象仓库
@@ -214,14 +217,18 @@ Settings
 {
   "format": "cthulhu-table.backup",
   "version": 1,
-  "appVersion": "0.1.0",
+  "appVersion": "1.0.0",
   "exportedAt": "2026-11-02T12:00:00.000Z",
   "settings": {},
   "characters": [],
+  "campaigns": [],
+  "activeCampaignId": "",
   "modules": [],
   "chats": [],
   "saves": []
 }
 ```
 
-> 完整备份包含 API 配置和密钥。第六阶段导入备份时会在 UI 中再次警告。
+单战役导出格式为 `cthulhu-table.campaign`，包含 `campaign`、`module`、`characters`、`chats` 与 `saves`。
+
+> 完整备份包含 API 配置和密钥。导入备份会覆盖当前浏览器数据，UI 会二次确认。

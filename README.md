@@ -3,133 +3,180 @@
 > 纯前端、零构建、本地优先的《克苏鲁的呼唤》第七版 AI 跑团桌面。  
 > 单人 / 多 PL · AI 守秘人 · GitHub Pages 静态托管 · 同人作品
 
-当前版本：**v0.1.0 · 第一阶段（应用外壳、页面骨架与本地数据层）**
+**v1.0.0** · 原生 ES Module + 原生 CSS + localStorage / IndexedDB
 
 ![Cthulhu Table 首屏](docs/preview-home.webp)
 
 ---
 
+## 已实现
+
+- **角色卡**：PL / NPC 全字段人设、JSON 导入导出、Markdown 人设卡、档案预览与编辑。
+- **CoC 7e 规则引擎**：八属性、年龄修正、HP/MP/SAN/MOV、DB/Build 查表、职业点/兴趣点、信用评级。
+- **自动车卡**：10 个内置职业模板、随机骰点、手工分配、LLM 严格 JSON 车卡、前端校验失败重试。
+- **骰子引擎**：`1d100`、`3d6`、`2d6+6`、`1d8+1d4+2`、`4d6k3`、奖惩骰、六档成功等级、对抗、SAN、伤害、幸运。
+- **跑团桌面**：SSE 流式 KP 叙事、聊天记录、骰子卡片、暗骰、角色切换、线索笔记本、剧情进度。
+- **API 层**：多套 OpenAI Chat Completions 兼容配置、自定义 baseURL/请求头/请求体、联网开关、超时与 429/5xx 重试、请求日志。
+- **模组**：`.txt / .md / .json` 导入、章节—场景—线索—NPC—事件切分、场景编辑、关键词倒排索引、TF-IDF 检索。
+- **KP 严格模组**：系统提示词硬约束、隐藏状态 JSON、状态补丁校验与合并、信息解锁控制。
+- **存档/归档**：战役快照、完整备份导入导出、角色/聊天/战役导出、API 日志面板。
+- **部署**：`.nojekyll`、GitHub Pages 404 回退、相对路径、移动端适配。
+
+> 详细部署说明见 [docs/deployment.md](docs/deployment.md)。  
+> 数据模型见 [docs/data-model.md](docs/data-model.md)。  
+> 路线图与验收标准见 [docs/roadmap.md](docs/roadmap.md)。
+
+---
+
 ## 快速开始
 
-### 方式一：本地预览（推荐）
+### 本地预览（推荐）
 
-双击项目根目录的 **`启动本地预览.bat`**，浏览器会自动打开：
+双击项目根目录的 **`启动本地预览.bat`**，会自动打开：
 
 ```text
 http://127.0.0.1:8000/
 ```
 
-脚本只使用 Windows 自带的 PowerShell，启动一个只读静态文件服务器，不需要 Node、Python 或任何后端。
+脚本使用 Windows 自带的 PowerShell 启动一个只读静态文件服务器，不需要 Node、Python 或后端。
 
-### 方式二：任意静态服务器
+### 任意静态服务器
 
-```powershell
-# 例如使用 Python
+```bash
 python -m http.server 8000
-# 或使用 VS Code 的 Live Server
+# 或 VS Code Live Server
 ```
 
 然后访问 `http://127.0.0.1:8000/`。
 
-### 为什么不能直接双击 `index.html`？
+### 为什么不能直接双击 index.html？
 
-项目使用**原生 ES Module**。浏览器安全策略禁止 `file://` 页面通过 CORS 加载模块文件，因此直接双击 `index.html` 会卡在启动页。这里没有改用打包器或全局变量，而是：
+本项目使用**原生 ES Module**。浏览器禁止 `file://` 页面通过 CORS 加载模块文件，因此直接双击会停在启动页。这不是应用 bug，而是浏览器安全策略。项目提供一键本地服务器；部署到 GitHub Pages 后完全正常。
 
-- 本地：使用 `启动本地预览.bat` / `serve.ps1`；
-- 线上：GitHub Pages 通过 HTTPS 提供静态文件，不存在该限制。
-
-这保持了「无构建链 + 原生 ES Module」的技术约束，也不引入任何后端。
-
-### 部署到 GitHub Pages
-
-1. 将整个 `cthulhu-table` 目录内容推到仓库根目录（或任意子目录）。
-2. 仓库 **Settings → Pages**：Source 选 `Deploy from a branch`，Branch 选 `main` / `(root)`。
-3. 等待发布。`.nojekyll` 已包含，避免 Jekyll 干扰静态资源。
-4. 所有路由为 Hash 路由（`#/home`），不需要 404 重写规则。
+如果必须双击直开，需要额外生成单文件 `standalone.html`（内联所有 JS），会牺牲模块结构；本项目没有采用。
 
 ---
 
-## 第一阶段已实现
+## 使用流程
 
-- [x] 暗黑克苏鲁视觉系统：深墨绿、旧金、暗红、羊皮纸纹理、响应式布局
-- [x] 六个页面的 Hash 路由骨架：总览 / 调查员 / 车卡工坊 / 模组档案 / 跑团桌面 / 设置
-- [x] 移动端侧栏、遮罩、断点适配与减少动效开关
-- [x] 自定义 SVG 印记、图标 sprite、空状态、Toast、原生 `<dialog>` 弹窗
-- [x] `storage.js` 本地数据层：localStorage + IndexedDB + 内存降级 + 自检
-- [x] 角色卡基础校验、示例调查员载入、完整档案预览、JSON 导出、删除
-- [x] 完整备份导出（设置 / 角色 / 模组 / 聊天 / 存档）
-- [x] 五份核心 JSON Schema + 数据模型文档
-- [x] 中文注释、无 TODO 占位、无外部 CDN/字体依赖
+1. **载入或创建调查员**：`/characters` → 新建调查员，或载入示例。
+2. **配置接口**：`/settings` → 添加接口 → 测试连接 → 启用。
+3. **导入模组**：`/modules` → 导入 `.md` / `.txt` / `.json`；打开「结构」检查切分，可编辑场景、标记关键线索/事件。
+4. **开始战役**：模组卡片 → 开始战役（自动带上全部 PL 调查员）。
+5. **跑团**：在桌面输入行动，Enter 发送；用骰子工具或 `/r`、`/c`、`/san`、`/luck` 命令。
+6. **存档/导出**：桌面右上角存档、读档、导出战役；设置页可导出完整备份。
 
-### 尚未接入（按阶段交付）
+### 桌面命令
 
-| 阶段 | 内容 |
+| 命令 | 作用 |
 | --- | --- |
-| 2 | 角色编辑、CoC 7e 规则引擎、职业模板、随机/手动车卡、JSON/Markdown 导入导出 |
-| 3 | 多套 OpenAI 兼容接口、SSE 流式、自定义请求头/请求体、联网开关、AI 自动车卡、日志 |
-| 4 | 骰子表达式、奖励/惩罚骰、CoC 检定、SAN/疯狂/伤害、聊天卡片 |
-| 5 | 模组导入解析、结构树编辑、TF-IDF 检索、KP 状态、严格模组提示词 |
-| 6 | 整战役存档/读档、聊天分组、日志面板、移动端回归、发布检查 |
+| `/r 1d100` | 掷骰；支持 `3d6`、`4d6k3`、`1d8+1d4+2` |
+| `/c 侦查` | 对当前调查员进行常规检定 |
+| `/c 侦查 困难` | 困难检定；也支持 `极难` |
+| `/san 1/1d6` | SAN 检定并扣除理智 |
+| `/luck 10` | 消耗 10 点幸运 |
+| `/opp 侦查 60` | 与技能值 60 的对手对抗 |
+| `/help` | 显示命令帮助 |
 
-> 第一阶段页面中涉及后续阶段的功能，会明确打开「路线图」说明，不使用静态假按钮或伪造数据。
+奖励/惩罚骰、暗骰、技能检定与 SAN 也可以从聊天区按钮直接操作。
 
 ---
 
-## 文件树与职责
+## 文件树
 
 ```text
 cthulhu-table/
-├── index.html                  应用外壳、SEO/主题色、启动页、图标 sprite、dialog/toast 容器
+├── index.html                    应用外壳、启动页、图标 sprite、dialog/toast 容器
+├── 404.html                      GitHub Pages 404 回退（自动回到 #/home）
+├── .nojekyll                     禁用 GitHub Pages 的 Jekyll 处理
 ├── css/
-│   └── main.css                设计令牌、布局、全部组件、响应式、动效与可访问性样式
+│   └── main.css                  设计系统、布局、车卡/桌面/设置全部样式
 ├── js/
-│   ├── app.js                  Hash 路由、六个页面模板、首屏交互、全局事件、启动流程
-│   ├── storage.js              localStorage/IndexedDB 封装、设置/角色/模组/聊天/存档 API、自检、备份
-│   ├── ui.js                   HTML 转义、图标、时间/字节格式化、Toast、dialog、下载工具
-│   └── sample-data.js          两位完整示例调查员（仅点击载入时写入本地）
+│   ├── app.js                    Hash 路由、应用外壳、全局动作分发
+│   ├── storage.js                localStorage + IndexedDB、战役、备份、日志
+│   ├── ui.js                     HTML 转义、Toast、Dialog、下载、格式化
+│   ├── dice.js                   骰子解析、CoC 检定、SAN、伤害
+│   ├── dice.test.js              30+ 条 console.assert 单元测试
+│   ├── character.js              CoC 规则引擎、职业模板、AI 车卡提示词与校验
+│   ├── api.js                    OpenAI 兼容接口、SSE、重试、联网、日志
+│   ├── module.js                 模组解析、分块、倒排索引、TF-IDF 检索
+│   ├── kp.js                     KP 提示词、状态机、上下文组装、信息释放
+│   ├── sample-data.js            示例调查员
+│   └── views/
+│       ├── home-view.js          战役总览
+│       ├── character-view.js     名册与车卡工作台
+│       ├── module-view.js        模组档案与结构编辑
+│       ├── table-view.js         跑团桌面与流式聊天
+│       └── settings-view.js      接口、KP 参数、存储、日志
 ├── assets/
-│   └── sigil.svg               原创旧日印记 SVG（Logo / 空状态 / 首屏）
+│   └── sigil.svg                 原创旧日印记
 ├── schemas/
-│   ├── character.schema.json   PL / NPC 角色卡 JSON Schema
-│   ├── module.schema.json      模组结构树、分块、线索、NPC、事件 Schema
-│   ├── session.schema.json     战役会话与 KP 内部状态 Schema
-│   ├── settings.schema.json    应用设置与多套 API 配置 Schema
-│   └── chat.schema.json        聊天记录与骰子消息 Schema
+│   ├── character.schema.json
+│   ├── module.schema.json
+│   ├── session.schema.json
+│   ├── settings.schema.json
+│   └── chat.schema.json
 ├── docs/
-│   ├── data-model.md           数据模型说明、字段树、规则口径、存储键位
-│   └── roadmap.md              六阶段任务清单与每阶段验收标准
-├── serve.ps1                   零依赖 PowerShell 静态预览服务器
-├── 启动本地预览.bat            双击启动本地预览
-├── .nojekyll                   GitHub Pages 禁用 Jekyll 处理
-└── README.md                   本文件
+│   ├── data-model.md
+│   ├── roadmap.md
+│   ├── deployment.md
+│   └── preview-home.webp
+├── serve.ps1                     零依赖 PowerShell 静态服务器
+├── 启动本地预览.bat              一键启动
+└── README.md
 ```
 
-后续阶段会新增：
+---
 
-```text
-js/
-├── character.js                车卡规则、年龄修正、职业模板、技能点校验、Markdown 导出
-├── dice.js                     骰子表达式解析、奖惩骰、CoC 检定、SAN/伤害
-├── api.js                      OpenAI Chat Completions、SSE、请求头/体合并、日志
-├── module.js                   模组解析、结构树、倒排索引/TF-IDF 检索
-└── kp.js                       KP 提示词、状态机、上下文组装、信息释放控制
+## 测试
+
+### 骰子单元测试
+
+设置页 → 「骰子自检」，或在控制台：
+
+```js
+const { runDiceTests } = await import('./js/dice.test.js');
+runDiceTests();
 ```
+
+覆盖：表达式、保留最高/最低、运算符优先级、00+0=100、奖励/惩罚骰、六档成功等级、大失败阈值、难度门槛、对抗、SAN、伤害、幸运、非法表达式。
+
+### 手工回归清单
+
+- [x] 桌面 1440px / 移动 390px，无横向溢出
+- [x] 六个页面路由与深链接刷新
+- [x] 示例角色载入、编辑、保存、JSON 导出
+- [x] 模组导入、检索、战役创建
+- [x] 骰子卡片、暗骰、SAN 扣除
+- [x] 多接口配置、SSE 流式、超时与 429/5xx 重试
+- [x] KP 状态块解析、合并、信息解锁
+- [x] 战役存档/读档、完整备份导出
+- [x] 无未捕获异常
 
 ---
 
 ## 数据与隐私
 
-- **没有后端。** 没有统计、没有账号、没有云端同步。
-- 设置与角色卡存 `localStorage`；模组原文、聊天、存档、API 日志存 `IndexedDB`。
-- API Key 只存在当前浏览器的 `localStorage`，并通过前端 `fetch` 直连你填写的接口。
-- 完整备份 JSON **包含 API Key**；不要把备份提交到公开仓库。
-- 清除浏览器站点数据会丢失全部战役；请定期导出备份。
+- **没有后端。** 没有账号、统计或云端同步。
+- 设置、角色、战役与 API Key 存 `localStorage`；模组、聊天、存档、日志存 `IndexedDB`。
+- API Key 只通过前端 `fetch` 发送到**你填写的接口地址**，不会上传到本项目。
+- 完整备份包含 API Key；请勿提交到公开仓库。
+- 清除浏览器站点数据会丢失全部战役，请定期导出备份。
 
 ---
 
 ## 规则与版权
 
 - 规则口径：*Call of Cthulhu 7th Edition* 核心规则书。
-- 车卡公式、年龄修正、DB/Build 表、检定等级会在对应阶段以中文注释写入代码，并标注出处。
+- 车卡公式、年龄修正、DB/Build 查表、检定等级均在代码中注明规则出处。
 - 本工具为非官方同人作品，与 Chaosium Inc. 无隶属关系。
 - 请只导入你拥有使用权的模组文本。
+
+---
+
+## 已知边界
+
+- 模组自动切分是启发式初稿；支持编辑场景内容和标记，但复杂排版仍建议先整理 Markdown 标题。
+- KP 的“严格遵循模组”依赖系统提示词与检索上下文，不能数学证明模型永不越界；前端会限制未解锁内容进入提示词，并校验状态补丁。
+- 多 PL 目前是同一浏览器中的多角色桌面，不是联机同步房间。
+- AI 自动车卡与守秘人需要可用的 OpenAI Chat Completions 兼容接口。

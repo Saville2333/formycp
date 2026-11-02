@@ -11,7 +11,7 @@
  * 本模块会降级到内存存储，并在自检中明确报告，不假装数据已经持久化。
  */
 
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '1.0.0';
 export const SCHEMA_VERSION = 1;
 
 const LS_PREFIX = 'cthulhu-table';
@@ -22,6 +22,8 @@ const MEMORY_FALLBACK = new Map();
 export const STORAGE_KEYS = Object.freeze({
   settings: `${LS_PREFIX}:settings:v1`,
   characters: `${LS_PREFIX}:characters:v1`,
+  campaigns: `${LS_PREFIX}:campaigns:v1`,
+  activeCampaign: `${LS_PREFIX}:active-campaign:v1`,
   ui: `${LS_PREFIX}:ui:v1`,
 });
 
@@ -364,8 +366,8 @@ function writeCharacterContainer(container) {
 }
 
 /**
- * 第一阶段的轻量校验：只保证存储层不会接收无法辨识的坏数据。
- * 完整的 CoC 七版数值校验在第二阶段 character.js 中实现。
+ * 存储层的轻量校验：只保证存储层不会接收无法辨识的坏数据。
+ * 完整的 CoC 七版数值校验在 character.js 的 validateBuild / validateAIBuild 中实现。
  */
 export function validateCharacterBasic(character) {
   const errors = [];
@@ -560,6 +562,112 @@ export function importCharacterJSON(text, { keepId = false } = {}) {
     updatedAt: nowIso(),
   };
   return saveCharacter(character);
+}
+
+/* =========================================================
+ * 战役 / 会话（localStorage）
+ * ========================================================= */
+
+const EMPTY_CAMPAIGNS = { schemaVersion: SCHEMA_VERSION, items: {} };
+
+function readCampaignContainer() {
+  const raw = readJSON(STORAGE_KEYS.campaigns, EMPTY_CAMPAIGNS);
+  if (Array.isArray(raw)) {
+    const items = {};
+    for (const item of raw) if (item?.id) items[item.id] = item;
+    return { schemaVersion: SCHEMA_VERSION, items };
+  }
+  if (isPlainObject(raw?.items)) return { schemaVersion: SCHEMA_VERSION, items: raw.items };
+  return clone(EMPTY_CAMPAIGNS);
+}
+
+function normalizeCampaign(input) {
+  const source = isPlainObject(input) ? clone(input) : {};
+  const timestamp = nowIso();
+  return {
+    ...source,
+    id: typeof source.id === 'string' && source.id ? source.id : createId('campaign'),
+    schemaVersion: SCHEMA_VERSION,
+    title: String(source.title || '未命名战役'),
+    status: ['setup', 'active', 'paused', 'completed'].includes(source.status)
+      ? source.status
+      : 'setup',
+    moduleId: String(source.moduleId || ''),
+    moduleTitle: String(source.moduleTitle || ''),
+    playerCharacterIds: Array.isArray(source.playerCharacterIds)
+      ? source.playerCharacterIds.map(String)
+      : [],
+    npcIds: Array.isArray(source.npcIds) ? source.npcIds.map(String) : [],
+    chatIds: Array.isArray(source.chatIds) ? source.chatIds.map(String) : [],
+    activeChapterId: source.activeChapterId || source.kpState?.currentChapterId || null,
+    activeSceneId: source.activeSceneId || source.kpState?.currentSceneId || null,
+    kpState: isPlainObject(source.kpState) ? source.kpState : {},
+    settings: isPlainObject(source.settings) ? source.settings : {},
+    createdAt: normalizeDate(source.createdAt, timestamp),
+    updatedAt: normalizeDate(source.updatedAt, timestamp),
+    lastPlayedAt: source.lastPlayedAt || null,
+  };
+}
+
+export function listCampaigns() {
+  const { items } = readCampaignContainer();
+  return Object.values(items)
+    .filter(isPlainObject)
+    .map(normalizeCampaign)
+    .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+}
+
+export function getCampaign(id) {
+  if (!id) return null;
+  const { items } = readCampaignContainer();
+  return isPlainObject(items[id]) ? normalizeCampaign(items[id]) : null;
+}
+
+export function saveCampaign(input) {
+  const container = readCampaignContainer();
+  const existing = input?.id ? container.items[input.id] : null;
+  const campaign = normalizeCampaign({
+    ...input,
+    id: existing?.id || input?.id || createId('campaign'),
+    createdAt: existing?.createdAt || input?.createdAt,
+    updatedAt: nowIso(),
+  });
+  campaign.activeChapterId = campaign.kpState?.currentChapterId || campaign.activeChapterId || null;
+  campaign.activeSceneId = campaign.kpState?.currentSceneId || campaign.activeSceneId || null;
+  container.items[campaign.id] = campaign;
+  writeJSON(STORAGE_KEYS.campaigns, { schemaVersion: SCHEMA_VERSION, items: container.items });
+  emit('cthulhu:campaigns-changed', { id: campaign.id });
+  return campaign;
+}
+
+export function deleteCampaign(id) {
+  const container = readCampaignContainer();
+  if (!container.items[id]) return false;
+  delete container.items[id];
+  writeJSON(STORAGE_KEYS.campaigns, { schemaVersion: SCHEMA_VERSION, items: container.items });
+  if (getActiveCampaignId() === id) removeRaw(STORAGE_KEYS.activeCampaign);
+  emit('cthulhu:campaigns-changed', { id });
+  return true;
+}
+
+export function getActiveCampaignId() {
+  const raw = readRaw(STORAGE_KEYS.activeCampaign);
+  return raw && getCampaign(raw) ? raw : '';
+}
+
+export function setActiveCampaign(id) {
+  if (id && !getCampaign(id)) {
+    throw new StorageError('找不到要激活的战役。', { code: 'CAMPAIGN_NOT_FOUND' });
+  }
+  if (id) writeRaw(STORAGE_KEYS.activeCampaign, id);
+  else removeRaw(STORAGE_KEYS.activeCampaign);
+  emit('cthulhu:active-campaign-changed', { id: id || '' });
+  return id || '';
+}
+
+export function getActiveCampaign() {
+  const id = getActiveCampaignId();
+  return id ? getCampaign(id) : null;
 }
 
 /* =========================================================
@@ -863,6 +971,7 @@ export async function getStorageStats() {
     localAvailable: isLocalStorageAvailable(),
     indexedDbAvailable: false,
     characters: getCharacterCount(),
+    campaigns: listCampaigns().length,
     modules: 0,
     chats: 0,
     saves: 0,
@@ -973,9 +1082,133 @@ export async function exportBackup() {
     exportedAt: nowIso(),
     settings: getSettings(),
     characters: listCharacters(),
+    campaigns: listCampaigns(),
+    activeCampaignId: getActiveCampaignId(),
     modules,
     chats,
     saves,
+  };
+}
+
+/** 导出单个战役，包含模组、角色、聊天与存档。 */
+export async function exportCampaignBundle(campaignId) {
+  const campaign = getCampaign(campaignId);
+  if (!campaign) throw new StorageError('找不到要导出的战役。', { code: 'CAMPAIGN_NOT_FOUND' });
+  const [module, chats, saves] = await Promise.all([
+    campaign.moduleId ? getModule(campaign.moduleId).catch(() => null) : null,
+    listChats(campaign.id).catch(() => []),
+    listSaves(campaign.id).catch(() => []),
+  ]);
+  const characters = campaign.playerCharacterIds
+    .map((id) => getCharacter(id))
+    .filter(Boolean);
+  return {
+    format: 'cthulhu-table.campaign',
+    version: SCHEMA_VERSION,
+    exportedAt: nowIso(),
+    campaign,
+    module,
+    characters,
+    chats,
+    saves,
+  };
+}
+
+/**
+ * 导入完整备份（替换模式）。会覆盖当前浏览器中的同 id 数据。
+ * API 设置与密钥也会被一并恢复，UI 必须明确提示。
+ */
+export async function importBackup(payload) {
+  let data = payload;
+  if (typeof payload === 'string') {
+    try {
+      data = JSON.parse(payload);
+    } catch (error) {
+      throw new StorageError('备份文件不是有效 JSON。', { code: 'INVALID_BACKUP', cause: error });
+    }
+  }
+  if (!isPlainObject(data) || data.format !== 'cthulhu-table.backup') {
+    throw new StorageError('不是 Cthulhu Table 的完整备份文件。', { code: 'INVALID_BACKUP' });
+  }
+  if (data.version !== SCHEMA_VERSION) {
+    throw new StorageError(`备份版本 ${data.version} 与当前版本 ${SCHEMA_VERSION} 不兼容。`, {
+      code: 'BACKUP_VERSION_MISMATCH',
+    });
+  }
+
+  if (data.settings) saveSettings(data.settings);
+
+  const characterContainer = { schemaVersion: SCHEMA_VERSION, items: {} };
+  for (const raw of Array.isArray(data.characters) ? data.characters : []) {
+    const check = validateCharacterBasic(raw);
+    if (!check.valid) continue;
+    const character = normalizeCharacter(raw);
+    characterContainer.items[character.id] = character;
+  }
+  writeCharacterContainer(characterContainer);
+
+  const campaigns = { schemaVersion: SCHEMA_VERSION, items: {} };
+  for (const raw of Array.isArray(data.campaigns) ? data.campaigns : []) {
+    if (raw?.id) campaigns.items[raw.id] = normalizeCampaign(raw);
+  }
+  writeJSON(STORAGE_KEYS.campaigns, campaigns);
+
+  try {
+    await openDatabase();
+    await Promise.all([
+      dbClear(DB_STORES.modules),
+      dbClear(DB_STORES.chats),
+      dbClear(DB_STORES.saves),
+      dbClear(DB_STORES.apiLogs),
+    ]);
+    for (const raw of Array.isArray(data.modules) ? data.modules : []) {
+      if (!raw || typeof raw !== 'object') continue;
+      await dbPut(DB_STORES.modules, {
+        ...clone(raw),
+        id: raw.id || createId('mod'),
+        schemaVersion: SCHEMA_VERSION,
+      });
+    }
+    for (const raw of Array.isArray(data.chats) ? data.chats : []) {
+      if (!raw || typeof raw !== 'object') continue;
+      await dbPut(DB_STORES.chats, {
+        ...clone(raw),
+        id: raw.id || createId('chat'),
+      });
+    }
+    for (const raw of Array.isArray(data.saves) ? data.saves : []) {
+      if (!raw || typeof raw !== 'object') continue;
+      await dbPut(DB_STORES.saves, {
+        ...clone(raw),
+        id: raw.id || createId('save'),
+      });
+    }
+  } catch (error) {
+    console.warn('[Cthulhu Table] 备份中的 IndexedDB 数据导入失败：', error);
+    throw new StorageError('角色已恢复，但模组/聊天存档写入 IndexedDB 失败。', {
+      code: 'BACKUP_IDB_FAILED',
+      cause: error,
+    });
+  }
+
+  if (data.activeCampaignId && campaigns.items[data.activeCampaignId]) {
+    writeRaw(STORAGE_KEYS.activeCampaign, data.activeCampaignId);
+  } else if (Object.keys(campaigns.items).length) {
+    writeRaw(STORAGE_KEYS.activeCampaign, Object.keys(campaigns.items)[0]);
+  } else {
+    removeRaw(STORAGE_KEYS.activeCampaign);
+  }
+
+  emit('cthulhu:characters-changed', { count: Object.keys(characterContainer.items).length });
+  emit('cthulhu:campaigns-changed', {});
+  emit('cthulhu:modules-changed', {});
+  emit('cthulhu:chats-changed', {});
+  return {
+    characters: Object.keys(characterContainer.items).length,
+    campaigns: Object.keys(campaigns.items).length,
+    modules: (data.modules || []).length,
+    chats: (data.chats || []).length,
+    saves: (data.saves || []).length,
   };
 }
 
@@ -989,6 +1222,8 @@ export async function clearAllData({ includeSettings = true } = {}) {
     removeRaw(STORAGE_KEYS.ui);
   }
   removeRaw(STORAGE_KEYS.characters);
+  removeRaw(STORAGE_KEYS.campaigns);
+  removeRaw(STORAGE_KEYS.activeCampaign);
   try {
     await openDatabase();
     await Promise.all(Object.values(DB_STORES).map((storeName) => dbClear(storeName)));
@@ -996,6 +1231,7 @@ export async function clearAllData({ includeSettings = true } = {}) {
     console.warn('[Cthulhu Table] 清空 IndexedDB 失败：', error);
   }
   emit('cthulhu:characters-changed', { count: 0 });
+  emit('cthulhu:campaigns-changed', {});
   emit('cthulhu:modules-changed', {});
   emit('cthulhu:chats-changed', {});
   return true;
@@ -1023,6 +1259,15 @@ export const storage = Object.freeze({
     importJSON: importCharacterJSON,
     parseJSON: parseCharacterJSON,
     validate: validateCharacterBasic,
+  },
+  campaigns: {
+    list: listCampaigns,
+    get: getCampaign,
+    save: saveCampaign,
+    remove: deleteCampaign,
+    getActive: getActiveCampaign,
+    getActiveId: getActiveCampaignId,
+    setActive: setActiveCampaign,
   },
   modules: {
     list: listModules,
@@ -1054,6 +1299,8 @@ export const storage = Object.freeze({
   },
   backup: {
     export: exportBackup,
+    import: importBackup,
+    exportCampaign: exportCampaignBundle,
   },
   clearAll: clearAllData,
 });
