@@ -2,7 +2,7 @@
  * settings-view.js — 接口配置、KP 参数、本地存储与日志
  */
 
-import { storage, normalizeApiProfile } from '../storage.js';
+import { storage, normalizeApiProfile, normalizeApiPreset } from '../storage.js';
 import { api } from '../api.js';
 import {
   escapeHTML,
@@ -16,6 +16,45 @@ import {
   confirmDialog,
   downloadFile,
 } from '../ui.js';
+
+/**
+ * 内置服务商快捷预设。只填入 URL / Model，不包含任何密钥；
+ * 用户保存到「我的预设」后才会连同 Key 一起留在本地。
+ */
+const BUILT_IN_PROVIDER_PRESETS = Object.freeze([
+  {
+    id: 'deepseek',
+    provider: 'deepseek',
+    name: 'DeepSeek 官方',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+    note: '推荐用于中文守秘人与模组结构检测',
+  },
+  {
+    id: 'openai',
+    provider: 'openai',
+    name: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+    note: '通用 OpenAI Chat Completions',
+  },
+  {
+    id: 'openrouter',
+    provider: 'openrouter',
+    name: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    model: 'openai/gpt-4o-mini',
+    note: '多模型中转；可能需要在请求头中填写 HTTP-Referer',
+  },
+  {
+    id: 'siliconflow',
+    provider: 'siliconflow',
+    name: '硅基流动',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    model: 'deepseek-ai/DeepSeek-V3',
+    note: '国内中转，具体模型名以控制台为准',
+  },
+]);
 
 function pageHead(actions = '') {
   return `<header class="page-head">
@@ -85,8 +124,21 @@ function logRow(log) {
   </tr>`;
 }
 
+function providerPresetButtons() {
+  return `<div class="provider-presets">
+    <span class="provider-presets__label">快捷填入</span>
+    ${BUILT_IN_PROVIDER_PRESETS.map(
+      (preset) =>
+        `<button class="provider-chip" type="button" data-fill-preset="${escapeHTML(
+          preset.id
+        )}">${escapeHTML(preset.name)}<small>${escapeHTML(preset.model)}</small></button>`
+    ).join('')}
+  </div>`;
+}
+
 function profileForm(profile) {
-  return `<div class="form-grid">
+  return `${providerPresetButtons()}
+  <div class="form-grid">
     <label class="form-field"><span class="form-field__label">配置名称</span><input class="form-input" id="api-name" value="${escapeHTML(
       profile.name || ''
     )}" placeholder="例如：DeepSeek 主接口"></label>
@@ -142,6 +194,131 @@ function profileForm(profile) {
   </div>`;
 }
 
+function presetMarkup(preset, { builtIn = false } = {}) {
+  return `<div class="preset-item">
+    <div class="preset-item__body">
+      <div class="preset-item__title">
+        ${escapeHTML(preset.name)}
+        <span class="tag">${escapeHTML(preset.provider || 'custom')}</span>
+        ${builtIn ? '<span class="tag">内置</span>' : ''}
+        <span class="tag ${preset.apiKey ? 'tag--pc' : ''}">${preset.apiKey ? 'Key 已保存' : '未保存 Key'}</span>
+      </div>
+      <p class="preset-item__meta">${escapeHTML(preset.model || '未填写模型')} · ${escapeHTML(
+        preset.baseUrl || ''
+      )}</p>
+      ${preset.note ? `<p class="preset-item__note">${escapeHTML(preset.note)}</p>` : ''}
+    </div>
+    <div class="preset-item__actions">
+      <button class="btn btn--gold btn--sm" type="button" ${
+        builtIn
+          ? `data-use-builtin-preset="${escapeHTML(preset.id)}"`
+          : `data-use-saved-preset="${escapeHTML(preset.id)}"`
+      }>${icon('arrow-right')} 使用</button>
+      ${
+        builtIn
+          ? ''
+          : `<button class="btn btn--ghost btn--sm btn--icon" type="button" data-delete-preset="${escapeHTML(
+              preset.id
+            )}" title="删除预设">${icon('trash', 'icon--sm')}</button>`
+      }
+    </div>
+  </div>`;
+}
+
+function openPresetLibrary(ctx) {
+  const settings = storage.settings.get();
+  const saved = settings.api.presets || [];
+  const body = document.createElement('div');
+  body.innerHTML = `<p class="modal-copy">预设保存 URL、API Key 与模型名。内置预设不含 Key；点击使用后补填并保存。所有预设只保存在本机 localStorage。</p>
+    <div class="settings-subsection">
+      <h4 class="settings-subsection__title">${icon('spark')} 内置服务商</h4>
+      <div class="preset-list">${BUILT_IN_PROVIDER_PRESETS.map((preset) => presetMarkup(preset, { builtIn: true })).join('')}</div>
+    </div>
+    <div class="settings-subsection">
+      <h4 class="settings-subsection__title">${icon('key')} 我的预设 <span class="panel__meta">${saved.length}</span></h4>
+      ${
+        saved.length
+          ? `<div class="preset-list">${saved.map((preset) => presetMarkup(preset)).join('')}</div>`
+          : '<p class="modal-copy muted">还没有保存的预设。编辑接口时点击「保存为预设」即可。</p>'
+      }
+    </div>`;
+  openModal({
+    eyebrow: 'API Presets',
+    title: '接口预设库',
+    body,
+    footer: `<div class="modal-actions"><button class="btn btn--ghost" type="button" data-new-preset>${icon(
+      'plus'
+    )} 新建接口</button><button class="btn btn--primary" type="button" data-close-dialog>关闭</button></div>`,
+    onMount: (dialog) => {
+      dialog.querySelectorAll('[data-use-builtin-preset]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const preset = BUILT_IN_PROVIDER_PRESETS.find((item) => item.id === button.dataset.useBuiltinPreset);
+          if (!preset) return;
+          openProfileEditor(
+            normalizeApiProfile({
+              name: preset.name,
+              baseUrl: preset.baseUrl,
+              model: preset.model,
+              apiKey: '',
+              temperature: 0.7,
+              maxTokens: 1600,
+              topP: 1,
+              stream: true,
+            }),
+            ctx,
+            { provider: preset.provider }
+          );
+        });
+      });
+      dialog.querySelectorAll('[data-use-saved-preset]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const preset = (storage.settings.get().api.presets || []).find(
+            (item) => item.id === button.dataset.useSavedPreset
+          );
+          if (!preset) return toast('预设不存在。', { type: 'error' });
+          const settingsNow = storage.settings.get();
+          const profile = normalizeApiProfile({
+            name: preset.name,
+            baseUrl: preset.baseUrl,
+            apiKey: preset.apiKey,
+            model: preset.model,
+            provider: preset.provider,
+          });
+          settingsNow.api.profiles.push(profile);
+          if (!settingsNow.api.activeProfileId) settingsNow.api.activeProfileId = profile.id;
+          storage.settings.save(settingsNow);
+          closeModal();
+          toast(`已从预设创建接口「${profile.name}」。`, { type: 'success' });
+          ctx.refresh();
+        });
+      });
+      dialog.querySelectorAll('[data-delete-preset]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const preset = (storage.settings.get().api.presets || []).find(
+            (item) => item.id === button.dataset.deletePreset
+          );
+          if (!preset) return;
+          const ok = await confirmDialog({
+            eyebrow: '删除预设',
+            title: `删除「${preset.name}」？`,
+            message: '只会删除预设条目，不会删除已经创建的接口配置。',
+            confirmLabel: '删除预设',
+            danger: true,
+          });
+          if (!ok) return;
+          const settingsNow = storage.settings.get();
+          settingsNow.api.presets = settingsNow.api.presets.filter((item) => item.id !== preset.id);
+          storage.settings.save(settingsNow);
+          toast('预设已删除。', { type: 'success' });
+          closeModal();
+          ctx.refresh();
+        });
+      });
+      dialog.querySelector('[data-new-preset]')?.addEventListener('click', () => openProfileEditor(null, ctx));
+    },
+  });
+}
+
 function collectProfile(dialog, existing) {
   const value = (id) => dialog.querySelector(`#${id}`)?.value ?? '';
   const checked = (id) => Boolean(dialog.querySelector(`#${id}`)?.checked);
@@ -195,12 +372,44 @@ export const settingsView = {
       <div class="settings-stack">
         <section class="settings-card">
           <div class="settings-card__head">
-            <div><h2 class="settings-card__title">AI 接口</h2><p class="settings-card__desc">兼容 OpenAI Chat Completions；可保存多套模型/中转配置。</p></div>
-            <button class="btn btn--primary btn--sm" type="button" data-action="add-api">${icon(
-              'plus'
-            )} 添加接口</button>
+            <div><h2 class="settings-card__title">AI 接口</h2><p class="settings-card__desc">兼容 OpenAI Chat Completions；可保存多套模型/中转配置与复用预设。</p></div>
+            <div class="modal-actions">
+              <button class="btn btn--ghost btn--sm" type="button" data-action="open-presets">${icon(
+                'key'
+              )} 接口预设 <span class="tag">${(settings.api.presets || []).length}</span></button>
+              <button class="btn btn--primary btn--sm" type="button" data-action="add-api">${icon(
+                'plus'
+              )} 添加接口</button>
+            </div>
           </div>
           ${profiles.length ? `<div class="api-profile-list">${profiles.map((profile) => profileCard(profile, activeId)).join('')}</div>` : `<div class="empty-state empty-state--compact"><p class="empty-state__text">还没有接口配置。添加一个 OpenAI 兼容接口后才能使用 AI 守秘人与 AI 车卡。</p></div>`}
+          <div class="settings-subsection">
+            <h4 class="settings-subsection__title">${icon('search')} 模组 AI 检测接口</h4>
+            <p class="form-help">导入模组后，用所选接口做一次结构审计；推荐 DeepSeek 官方：<code>https://api.deepseek.com/v1</code> / <code>deepseek-chat</code>。</p>
+            <div class="form-grid" style="margin-top:10px;">
+              <label class="form-field"><span class="form-field__label">检测使用接口</span>
+                <select class="form-input" id="module-check-profile" ${
+                  profiles.length ? '' : 'disabled'
+                }>
+                  <option value="">使用当前接口</option>
+                  ${profiles
+                    .map(
+                      (profile) =>
+                        `<option value="${escapeHTML(profile.id)}" ${
+                          (settings.api.moduleCheckProfileId || activeId) === profile.id ? 'selected' : ''
+                        }>${escapeHTML(profile.name)} · ${escapeHTML(profile.model || '未填写模型')}</option>`
+                    )
+                    .join('')}
+                </select>
+              </label>
+              <div class="form-field form-field--check">
+                <span class="form-field__label">&nbsp;</span>
+                <button class="btn btn--gold btn--sm" type="button" data-action="save-module-check">${icon(
+                  'check'
+                )} 保存检测接口</button>
+              </div>
+            </div>
+          </div>
           <div class="privacy-note" style="margin-top:16px;">
             <p class="privacy-note__title">${icon('lock')} API Key 只存本地</p>
             <p class="privacy-note__text">密钥写入 localStorage，并通过前端 fetch 直连你填写的接口地址。本站没有后端，也不会上传密钥。公共电脑使用后请清除浏览器数据。</p>
@@ -343,6 +552,24 @@ export const settingsView = {
   actions: {
     async 'add-api'(element, ctx) {
       openProfileEditor(null, ctx);
+    },
+
+    async 'open-presets'(element, ctx) {
+      openPresetLibrary(ctx);
+    },
+
+    async 'save-module-check'(element, ctx) {
+      const select = document.getElementById('module-check-profile');
+      storage.settings.update({
+        api: { moduleCheckProfileId: select?.value || '' },
+      });
+      toast(
+        select?.value
+          ? '模组 AI 检测接口已保存。导入模组时可以启用检测。'
+          : '已设为使用当前接口。',
+        { type: 'success' }
+      );
+      ctx.refresh();
     },
 
     async 'edit-api'(element, ctx) {
@@ -503,7 +730,16 @@ export const settingsView = {
   },
 };
 
-function openProfileEditor(existing, ctx) {
+function providerFromBaseUrl(baseUrl) {
+  const value = String(baseUrl || '').toLowerCase();
+  if (value.includes('deepseek')) return 'deepseek';
+  if (value.includes('openrouter')) return 'openrouter';
+  if (value.includes('siliconflow')) return 'siliconflow';
+  if (value.includes('openai')) return 'openai';
+  return 'custom';
+}
+
+function openProfileEditor(existing, ctx, { provider = '' } = {}) {
   const profile = existing || normalizeApiProfile({ name: '新的接口', model: '' });
   openModal({
     eyebrow: existing ? 'Edit API Profile' : 'New API Profile',
@@ -511,7 +747,10 @@ function openProfileEditor(existing, ctx) {
     body: profileForm(profile),
     footer: `<div class="modal-actions">
       <button class="btn btn--ghost" type="button" data-close-dialog>取消</button>
-      <button class="btn btn--gold" type="button" data-test-profile>${icon(
+      <button class="btn btn--gold" type="button" data-save-preset>${icon(
+        'key'
+      )} 保存为预设</button>
+      <button class="btn btn--ghost" type="button" data-test-profile>${icon(
         'refresh'
       )} 测试连接</button>
       <button class="btn btn--primary" type="button" data-save-profile>${icon(
@@ -519,6 +758,24 @@ function openProfileEditor(existing, ctx) {
       )} 保存配置</button>
     </div>`,
     onMount: (dialog) => {
+      dialog.querySelectorAll('[data-fill-preset]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const preset = BUILT_IN_PROVIDER_PRESETS.find((item) => item.id === button.dataset.fillPreset);
+          if (!preset) return;
+          const set = (id, value) => {
+            const input = dialog.querySelector(`#${id}`);
+            if (input) input.value = value;
+          };
+          set('api-name', preset.name);
+          set('api-base-url', preset.baseUrl);
+          set('api-model', preset.model);
+          toast(`已填入 ${preset.name} 的 URL 与模型；请补充 API Key。`, {
+            type: 'info',
+            duration: 3500,
+          });
+        });
+      });
+
       dialog.querySelector('[data-save-profile]')?.addEventListener('click', () => {
         try {
           const next = collectProfile(dialog, existing);
@@ -535,6 +792,33 @@ function openProfileEditor(existing, ctx) {
           toast(error.message, { type: 'error', duration: 6000 });
         }
       });
+
+      dialog.querySelector('[data-save-preset]')?.addEventListener('click', () => {
+        try {
+          const next = collectProfile(dialog, existing);
+          const settingsNow = storage.settings.get();
+          const preset = normalizeApiPreset({
+            provider: provider || providerFromBaseUrl(next.baseUrl),
+            name: next.name,
+            baseUrl: next.baseUrl,
+            apiKey: next.apiKey,
+            model: next.model,
+          });
+          const index = settingsNow.api.presets.findIndex(
+            (item) => item.name.toLowerCase() === preset.name.toLowerCase()
+          );
+          if (index >= 0) settingsNow.api.presets[index] = preset;
+          else settingsNow.api.presets.push(preset);
+          storage.settings.save(settingsNow);
+          toast(`预设「${preset.name}」已保存，可在「接口预设」中复用。`, {
+            type: 'success',
+            duration: 4500,
+          });
+        } catch (error) {
+          toast(error.message, { type: 'error', duration: 6000 });
+        }
+      });
+
       dialog.querySelector('[data-test-profile]')?.addEventListener('click', async (event) => {
         const button = event.currentTarget;
         const original = button.innerHTML;

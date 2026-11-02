@@ -86,6 +86,57 @@
       },
       "additionalProperties": false
     },
+    "aiAudit": {
+      "type": "object",
+      "properties": {
+        "version": { "type": "integer", "minimum": 1 },
+        "verdict": { "enum": ["ok", "warning", "error"] },
+        "summary": { "type": "string", "maxLength": 2000 },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "maxLength": 40 },
+              "message": { "type": "string", "maxLength": 1000 },
+              "sceneTitle": { "type": "string", "maxLength": 300 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "keyClues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "clueId": { "type": "string" },
+              "title": { "type": "string" },
+              "reason": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "mustTriggerEvents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "eventId": { "type": "string" },
+              "title": { "type": "string" },
+              "reason": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "sceneIssues": { "type": "array", "items": { "type": "object" } },
+        "provider": { "type": "string", "maxLength": 100 },
+        "model": { "type": "string", "maxLength": 200 },
+        "truncated": { "type": "boolean" },
+        "charsAudited": { "type": "integer", "minimum": 0 },
+        "checkedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
     "meta": {
       "type": "object",
       "properties": {

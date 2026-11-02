@@ -3359,6 +3359,119 @@ svg {
   flex: 1;
 }
 
+.module-card__badges {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.module-audit {
+  margin: 14px 0 4px;
+  padding: 13px 14px;
+  border: 1px solid rgba(185, 154, 91, 0.24);
+  border-left: 2px solid var(--gold);
+  background: rgba(15, 31, 23, 0.52);
+}
+
+.module-audit.is-empty {
+  border-color: var(--line);
+  border-left-color: var(--line-strong);
+}
+
+.module-audit__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+}
+
+.module-audit__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--gold);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.module-audit__head .panel__meta {
+  margin-left: auto;
+}
+
+.module-audit__summary {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 10.5px;
+  line-height: 1.8;
+}
+
+.module-audit__text {
+  margin: 0;
+  color: var(--faint);
+  font-size: 9px;
+  line-height: 1.8;
+}
+
+.module-audit__warnings {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.module-audit__warnings li {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.75;
+}
+
+.module-audit__warnings small {
+  display: block;
+  color: var(--faint);
+  font-size: 8px;
+}
+
+.module-audit__details {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.module-audit__details summary {
+  color: var(--gold-dim);
+  cursor: pointer;
+}
+
+.module-audit__details ul {
+  display: grid;
+  gap: 4px;
+  margin: 7px 0 0;
+  padding-left: 16px;
+  line-height: 1.75;
+}
+
+.module-audit__foot {
+  margin: 9px 0 0;
+  padding-top: 7px;
+  border-top: 1px solid rgba(184, 154, 93, 0.1);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+}
+
+.module-import-status {
+  min-height: 1.6em;
+  margin: 9px 0 0;
+  color: var(--gold);
+  font-size: 9px;
+  line-height: 1.7;
+}
+
 .module-card__title {
   margin: 0 0 3px;
   font-size: 17px;
@@ -3508,6 +3621,99 @@ svg {
 }
 
 /* ---------- API 配置 ---------- */
+
+.provider-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(184, 154, 93, 0.1);
+}
+
+.provider-presets__label {
+  margin-right: 4px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+}
+
+.provider-chip {
+  display: grid;
+  gap: 1px;
+  padding: 6px 9px;
+  border: 1px solid rgba(184, 154, 93, 0.18);
+  background: rgba(185, 154, 91, 0.045);
+  color: var(--gold-bright);
+  font-size: 9px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.provider-chip small {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 7px;
+}
+
+.provider-chip:hover {
+  border-color: var(--line-strong);
+  background: rgba(185, 154, 91, 0.1);
+}
+
+.preset-list {
+  display: grid;
+  gap: 7px;
+}
+
+.preset-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: rgba(10, 23, 16, 0.5);
+}
+
+.preset-item__body {
+  min-width: 0;
+}
+
+.preset-item__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 11px;
+}
+
+.preset-item__meta {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-item__note {
+  margin: 3px 0 0;
+  color: #7c877a;
+  font-size: 8px;
+}
+
+.preset-item__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
 
 .api-profile-list {
   display: grid;
@@ -4352,6 +4558,19 @@ svg {
 }
 
 @media (max-width: 480px) {
+  .preset-item {
+    display: block;
+  }
+
+  .preset-item__actions {
+    margin-top: 8px;
+    justify-content: flex-start;
+  }
+
+  .provider-chip {
+    flex: 1;
+  }
+
   .dice-tools__row .form-input {
     flex: 1;
     min-width: 70px;

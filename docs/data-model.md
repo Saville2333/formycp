@@ -105,6 +105,8 @@ Module
 ├── npcs[]  { id, name, role, attitude, description, secrets, sceneIds[] }
 ├── events[] { id, title, mustTrigger, triggerCondition, triggered }
 ├── retrieval { method: keyword|tfidf|hybrid, index{term: chunkId[]} }
+├── aiAudit { verdict, summary, warnings[], keyClues[], mustTriggerEvents[],
+│             sceneIssues[], provider, model, checkedAt, truncated }
 └── meta { estimatedDuration, playerCount, keeperNotes }
 ```
 
@@ -114,6 +116,7 @@ Module
 2. `mustNotLeakBeforeUnlock` 与章节/场景解锁状态共同决定该块能否进入提示词。
 3. `mustTrigger` 的事件进入 KP 状态机；触发后写回 `triggered`。
 4. `source.rawText` 允许保留完整原文，作为最终事实来源。
+5. `aiAudit` 只接受与现有线索/事件/场景标题精确匹配的建议；模型不能凭空新增模组内容。
 
 ## 4. 会话/战役 `session.schema.json`
 
@@ -168,13 +171,18 @@ Settings
 │   │   ├── temperature / maxTokens / topP / stream
 │   │   ├── headersJson / extraBodyJson
 │   │   └── webSearch { enabled, headersJson, bodyJson }
+│   ├── presets[] { provider, name, baseUrl, apiKey, model }
 │   ├── activeProfileId
+│   ├── moduleCheckProfileId
 │   └── requestTimeoutMs
 ├── kp { contextRounds, retrievalTopK, narrativeMin/Max, showInternalState }
 └── privacy { acknowledgedLocalKey }
 ```
 
 `headersJson` / `extraBodyJson` 存为**字符串**而不是对象：允许用户编辑到一半时保存，发送前再做严格 JSON 解析并给出中文错误。
+
+`api.presets` 保存可复用的 URL / Key / 模型名；内置服务商只提供 URL 与模型，不包含 Key。`moduleCheckProfileId` 指向用于模组导入审计的接口配置，推荐 DeepSeek：
+`https://api.deepseek.com/v1` + `deepseek-chat`。AI 审计结果写入 `module.aiAudit`，不会覆盖原文。
 
 ## 7. localStorage 键位
 

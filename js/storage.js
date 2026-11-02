@@ -43,7 +43,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   },
   api: {
     profiles: [],
+    presets: [],
     activeProfileId: '',
+    moduleCheckProfileId: '',
     requestTimeoutMs: 120000,
   },
   kp: {
@@ -262,22 +264,46 @@ export function normalizeApiProfile(input = {}) {
   };
 }
 
+/** 接口预设只保存恢复连接所需的四项核心信息（可额外保存服务商标签）。 */
+export function normalizeApiPreset(input = {}) {
+  const preset = isPlainObject(input) ? clone(input) : {};
+  return {
+    id: typeof preset.id === 'string' && preset.id ? preset.id : createId('preset'),
+    provider: typeof preset.provider === 'string' ? preset.provider : 'custom',
+    name: typeof preset.name === 'string' && preset.name.trim() ? preset.name.trim() : '未命名预设',
+    baseUrl: typeof preset.baseUrl === 'string' ? preset.baseUrl.trim() : 'https://api.deepseek.com/v1',
+    apiKey: typeof preset.apiKey === 'string' ? preset.apiKey : '',
+    model: typeof preset.model === 'string' ? preset.model.trim() : 'deepseek-chat',
+    createdAt: normalizeDate(preset.createdAt),
+    updatedAt: normalizeDate(preset.updatedAt),
+  };
+}
+
 export function normalizeSettings(input) {
   const merged = deepMerge(clone(DEFAULT_SETTINGS), isPlainObject(input) ? input : {});
   const profiles = Array.isArray(merged.api?.profiles)
     ? merged.api.profiles.map(normalizeApiProfile)
+    : [];
+  const presets = Array.isArray(merged.api?.presets)
+    ? merged.api.presets.map(normalizeApiPreset)
     : [];
   merged.schemaVersion = SCHEMA_VERSION;
   merged.api = {
     ...DEFAULT_SETTINGS.api,
     ...(isPlainObject(merged.api) ? merged.api : {}),
     profiles,
+    presets,
   };
   merged.api.activeProfileId =
     typeof merged.api.activeProfileId === 'string' &&
     profiles.some((profile) => profile.id === merged.api.activeProfileId)
       ? merged.api.activeProfileId
       : profiles[0]?.id || '';
+  merged.api.moduleCheckProfileId =
+    typeof merged.api.moduleCheckProfileId === 'string' &&
+    profiles.some((profile) => profile.id === merged.api.moduleCheckProfileId)
+      ? merged.api.moduleCheckProfileId
+      : '';
   merged.app = { ...clone(DEFAULT_SETTINGS.app), ...(isPlainObject(merged.app) ? merged.app : {}) };
   merged.kp = { ...clone(DEFAULT_SETTINGS.kp), ...(isPlainObject(merged.kp) ? merged.kp : {}) };
   merged.privacy = {

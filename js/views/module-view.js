@@ -15,6 +15,7 @@ import {
   setEventMustTrigger,
 } from '../module.js';
 import { createInitialKpState } from '../kp.js';
+import { auditModuleWithAI } from '../module-audit.js';
 import {
   escapeHTML,
   icon,
@@ -26,6 +27,56 @@ import {
   closeModal,
   confirmDialog,
 } from '../ui.js';
+
+function moduleAuditMarkup(module) {
+  const audit = module.aiAudit;
+  if (!audit) {
+    return `<div class="module-audit is-empty">
+      <p class="module-audit__title">${icon('search')} 尚未进行 AI 结构检测</p>
+      <p class="module-audit__text">可以使用 DeepSeek / OpenAI 兼容接口检查切分、关键线索与必须触发事件。AI 只给建议，不会改动原文。</p>
+    </div>`;
+  }
+  return `<div class="module-audit">
+    <div class="module-audit__head">
+      <span class="module-audit__title">${icon('spark')} AI 结构检测</span>
+      <span class="tag ${audit.verdict === 'ok' ? 'tag--pc' : 'tag--npc'}">${escapeHTML(
+        audit.verdict || 'warning'
+      )}</span>
+      <span class="panel__meta">${escapeHTML(audit.model || '')}</span>
+    </div>
+    <p class="module-audit__summary">${escapeHTML(audit.summary || '无摘要')}</p>
+    ${
+      audit.warnings?.length
+        ? `<ul class="module-audit__warnings">${audit.warnings
+            .slice(0, 8)
+            .map(
+              (warning) =>
+                `<li><span class="tag">${escapeHTML(warning.code || 'other')}</span> ${escapeHTML(
+                  warning.message
+                )}${warning.sceneTitle ? `<small>场景：${escapeHTML(warning.sceneTitle)}</small>` : ''}</li>`
+            )
+            .join('')}</ul>`
+        : '<p class="module-audit__text">没有发现明显结构问题。</p>'
+    }
+    ${
+      audit.sceneIssues?.length
+        ? `<details class="module-audit__details"><summary>切分建议（${audit.sceneIssues.length}）</summary><ul>${audit.sceneIssues
+            .map(
+              (item) =>
+                `<li><strong>${escapeHTML(item.title)}</strong>：${escapeHTML(item.issue)}${
+                  item.suggestion ? ` → ${escapeHTML(item.suggestion)}` : ''
+                }</li>`
+            )
+            .join('')}</ul></details>`
+        : ''
+    }
+    <p class="module-audit__foot">${escapeHTML(
+      `已标记 ${audit.keyClues?.length || 0} 条关键线索、${audit.mustTriggerEvents?.length || 0} 个必须事件 · ${new Date(
+        audit.checkedAt
+      ).toLocaleString('zh-CN')}`
+    )}${audit.truncated ? ' · 正文过长，仅检测了前一部分' : ''}</p>
+  </div>`;
+}
 
 function pageHead(actions = '') {
   return `<header class="page-head">
@@ -43,6 +94,7 @@ function pageHead(actions = '') {
 function moduleCard(module, activeCampaign) {
   const stats = moduleStats(module);
   const isActive = activeCampaign?.moduleId === module.id;
+  const audit = module.aiAudit;
   return `<article class="module-card">
     <div class="module-card__top">
       <div class="module-card__glyph">${icon('book')}</div>
@@ -52,7 +104,16 @@ function moduleCard(module, activeCampaign) {
           `${stats.chapters} 章 · ${stats.scenes} 场景 · ${stats.clues} 线索 · ${stats.npcs} NPC · ${stats.chunks} 分块`
         )}</p>
       </div>
-      ${isActive ? '<span class="tag tag--pc">进行中</span>' : ''}
+      <div class="module-card__badges">
+        ${isActive ? '<span class="tag tag--pc">进行中</span>' : ''}
+        ${
+          audit
+            ? `<span class="tag ${audit.verdict === 'ok' ? 'tag--pc' : 'tag--npc'}" title="${escapeHTML(
+                audit.summary || ''
+              )}">AI ${audit.verdict === 'ok' ? '通过' : `${(audit.warnings || []).length} 提示`}</span>`
+            : ''
+        }
+      </div>
     </div>
     <p class="module-card__desc">${escapeHTML(
       module.description || module.structure?.chapters?.[0]?.summary || '尚无简介。'
@@ -145,6 +206,10 @@ export const moduleView = {
 
   actions: {
     async 'open-module-import'(element, ctx) {
+      const settings = storage.settings.get();
+      const profiles = settings.api.profiles || [];
+      const defaultCheckId =
+        settings.api.moduleCheckProfileId || settings.api.activeProfileId || profiles[0]?.id || '';
       const body = document.createElement('div');
       body.className = 'import-module-form';
       body.innerHTML = `
@@ -162,9 +227,35 @@ export const moduleView = {
           <span class="form-field__label">或直接粘贴模组文本</span>
           <textarea class="form-input form-textarea" id="module-import-text" rows="14" placeholder="支持 Markdown 标题层级：# 章节 / ## 场景 / ### 线索：……"></textarea>
         </label>
+        <div class="settings-subsection">
+          <h4 class="settings-subsection__title">${icon('search')} AI 结构检测（可选）</h4>
+          <label class="check-line"><input type="checkbox" id="module-ai-enabled" ${
+            profiles.length ? 'checked' : 'disabled'
+          }> 导入后调用 AI 审校结构，标记关键线索 / 事件并给出切分提示</label>
+          <p class="form-help">推荐使用 DeepSeek 官方接口：<code>https://api.deepseek.com/v1</code>，模型 <code>deepseek-chat</code>。检测只读取模组文本，不会改写原文。</p>
+          <div class="form-grid" style="margin-top:10px;">
+            <label class="form-field form-field--wide"><span class="form-field__label">检测接口</span>
+              <select class="form-input" id="module-ai-profile" ${profiles.length ? '' : 'disabled'}>
+                ${
+                  profiles.length
+                    ? profiles
+                        .map(
+                          (profile) =>
+                            `<option value="${escapeHTML(profile.id)}" ${
+                              profile.id === defaultCheckId ? 'selected' : ''
+                            }>${escapeHTML(profile.name)} · ${escapeHTML(profile.model || '未填写模型')}</option>`
+                        )
+                        .join('')
+                    : '<option value="">未配置接口</option>'
+                }
+              </select>
+            </label>
+          </div>
+          <p class="module-import-status" id="module-import-status"></p>
+        </div>
         <div class="info-strip">
           ${icon('file')}
-          <span>支持 .txt / .md / .json。JSON 可以是 Cthulhu Table 模组结构，也可以是普通文本对象。</span>
+          <span>支持 .txt / .md / .json。JSON 可以是 Cthulhu Table 模组结构，也可以是普通文本对象。检测失败不会阻止本地导入。</span>
         </div>`;
       openModal({
         eyebrow: 'Module Import',
@@ -181,6 +272,7 @@ export const moduleView = {
           const fileInput = dialog.querySelector('#module-import-file');
           const textArea = dialog.querySelector('#module-import-text');
           const titleInput = dialog.querySelector('#module-import-title');
+          const status = dialog.querySelector('#module-import-status');
           fileInput?.addEventListener('change', async () => {
             const file = fileInput.files?.[0];
             if (!file) return;
@@ -203,10 +295,47 @@ export const moduleView = {
                 fileName,
                 title: titleInput.value.trim(),
               });
+              const checkEnabled = Boolean(dialog.querySelector('#module-ai-enabled')?.checked);
+              const checkProfileId = dialog.querySelector('#module-ai-profile')?.value || '';
+              const checkProfile =
+                profiles.find((profile) => profile.id === checkProfileId) ||
+                profiles.find((profile) => profile.id === settings.api.activeProfileId) ||
+                profiles[0];
+              let auditResult = null;
+              let auditError = '';
+              if (checkEnabled && checkProfile) {
+                button.textContent = 'AI 检测中…';
+                if (status) status.textContent = '正在调用接口审校模组结构…';
+                try {
+                  auditResult = await auditModuleWithAI(parsed, checkProfile, {
+                    onStatus: (message) => {
+                      if (status) status.textContent = message;
+                    },
+                  });
+                  if (status) {
+                    status.textContent = `检测完成：${auditResult.audit.verdict} · ${
+                      auditResult.audit.summary || '无摘要'
+                    }${auditResult.truncated ? '（正文过长，仅检测了前一部分）' : ''}`;
+                  }
+                } catch (error) {
+                  auditError = error.message;
+                  if (status) status.textContent = `AI 检测失败：${error.message}`;
+                  toast(`AI 检测失败，仍会保存本地解析结果：${error.message}`, {
+                    type: 'warning',
+                    duration: 7000,
+                  });
+                }
+              }
+              button.textContent = '保存中…';
               const saved = await storage.modules.save(parsed);
-              toast(`《${saved.title}》已导入：${saved.chunks.length} 个分块。`, {
-                type: 'success',
-                duration: 5000,
+              const auditText = auditResult
+                ? ` AI 检测：${auditResult.audit.verdict}，${(auditResult.audit.warnings || []).length} 条提示。`
+                : auditError
+                  ? ' AI 检测失败，可在结构页重试。'
+                  : '';
+              toast(`《${saved.title}》已导入：${saved.chunks.length} 个分块。${auditText}`, {
+                type: auditError ? 'info' : 'success',
+                duration: 6000,
               });
               closeModal();
               ctx.refresh();
@@ -255,6 +384,7 @@ export const moduleView = {
       const body = `<div class="module-summary">
         <p class="modal-copy">${stats.chapters} 章 · ${stats.scenes} 场景 · ${stats.clues} 线索 · ${stats.npcs} NPC · ${stats.events} 事件 · ${stats.chunks} 分块</p>
       </div>
+      ${moduleAuditMarkup(module)}
       <div class="module-tree">${chapterMarkup || '<p class="modal-copy">尚未生成章节结构。</p>'}</div>
       <div class="sheet-section">
         <h4 class="sheet-section__title">关键线索</h4>
@@ -286,6 +416,9 @@ export const moduleView = {
       </div>
       <div class="info-strip">${icon('refresh')}<span>修改关键标记后，点击「重建检索分块」可以重新生成索引。</span></div>
       <div class="modal-actions" style="margin-top:16px;">
+        <button class="btn btn--gold" type="button" data-action="audit-module" data-module-id="${escapeHTML(
+          module.id
+        )}">${icon('search')} AI 重新检测</button>
         <button class="btn btn--ghost" type="button" data-action="rebuild-module-index" data-module-id="${escapeHTML(
           module.id
         )}">${icon('refresh')} 重建检索分块</button>
@@ -361,6 +494,53 @@ export const moduleView = {
           });
         },
       });
+    },
+
+    async 'audit-module'(element, ctx) {
+      const module = await storage.modules.get(element.dataset.moduleId);
+      if (!module) return toast('模组不存在。', { type: 'error' });
+      const settings = storage.settings.get();
+      const profile =
+        settings.api.profiles.find(
+          (item) => item.id === settings.api.moduleCheckProfileId
+        ) ||
+        settings.api.profiles.find((item) => item.id === settings.api.activeProfileId) ||
+        settings.api.profiles[0];
+      if (!profile) {
+        return toast('请先在「设置与接口」添加 DeepSeek 或 OpenAI 兼容接口。', {
+          type: 'error',
+          duration: 6000,
+        });
+      }
+      const body = document.createElement('div');
+      body.innerHTML = `<p class="modal-copy">将使用 <strong>${escapeHTML(
+        profile.name
+      )} / ${escapeHTML(profile.model || '未填写模型')}</strong> 审校结构。检测只读取模组文本，不会改动原文；建议先导出模组 JSON 备份。</p><p class="module-import-status" id="audit-progress">等待开始…</p>`;
+      openModal({
+        eyebrow: 'AI Module Audit',
+        title: '模组 AI 结构检测',
+        body,
+        footer: `<div class="modal-actions"><button class="btn btn--ghost" type="button" data-close-dialog>关闭</button></div>`,
+      });
+      const progress = document.getElementById('audit-progress');
+      try {
+        const result = await auditModuleWithAI(module, profile, {
+          onStatus: (message) => {
+            if (progress) progress.textContent = message;
+          },
+        });
+        await storage.modules.save(module);
+        if (progress) progress.textContent = '检测完成，正在刷新档案柜…';
+        closeModal();
+        toast(
+          `AI 检测完成：${result.audit.verdict}，${result.ignored.length} 条无法匹配的建议已忽略。`,
+          { type: result.audit.verdict === 'ok' ? 'success' : 'info', duration: 5500 }
+        );
+        ctx.refresh();
+      } catch (error) {
+        if (progress) progress.textContent = `检测失败：${error.message}`;
+        toast(`AI 检测失败：${error.message}`, { type: 'error', duration: 7000 });
+      }
     },
 
     async 'rebuild-module-index'(element, ctx) {
