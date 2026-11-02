@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cthulhu-table.local/schemas/settings.schema.json",
+  "title": "Cthulhu Table Settings",
+  "description": "应用设置与多套 OpenAI 兼容接口配置。API Key 仅保存在 localStorage，切勿提交到公开仓库。",
+  "type": "object",
+  "required": ["schemaVersion", "app", "api", "kp", "privacy"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "app": {
+      "type": "object",
+      "required": ["reduceMotion", "lastRoute"],
+      "properties": {
+        "reduceMotion": { "type": "boolean" },
+        "lastRoute": { "type": "string", "maxLength": 300 }
+      },
+      "additionalProperties": false
+    },
+    "api": {
+      "type": "object",
+      "required": ["profiles", "activeProfileId", "requestTimeoutMs"],
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "#/$defs/apiProfile" }
+        },
+        "activeProfileId": { "type": "string", "maxLength": 80 },
+        "requestTimeoutMs": {
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 600000
+        }
+      },
+      "additionalProperties": false
+    },
+    "kp": {
+      "type": "object",
+      "required": [
+        "contextRounds",
+        "retrievalTopK",
+        "narrativeMin",
+        "narrativeMax",
+        "showInternalState"
+      ],
+      "properties": {
+        "contextRounds": { "type": "integer", "minimum": 2, "maximum": 50 },
+        "retrievalTopK": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "narrativeMin": { "type": "integer", "minimum": 50, "maximum": 1000 },
+        "narrativeMax": { "type": "integer", "minimum": 100, "maximum": 2000 },
+        "showInternalState": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "privacy": {
+      "type": "object",
+      "required": ["acknowledgedLocalKey"],
+      "properties": {
+        "acknowledgedLocalKey": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "apiProfile": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "baseUrl",
+        "apiKey",
+        "model",
+        "temperature",
+        "maxTokens",
+        "topP",
+        "stream",
+        "headersJson",
+        "extraBodyJson",
+        "webSearch"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{3,80}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "baseUrl": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "apiKey": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "仅存于 localStorage。不要在公共设备或公开备份中分享。"
+        },
+        "model": { "type": "string", "maxLength": 200 },
+        "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+        "maxTokens": { "type": "integer", "minimum": 1, "maximum": 200000 },
+        "topP": { "type": "number", "minimum": 0, "maximum": 1 },
+        "stream": { "type": "boolean" },
+        "headersJson": {
+          "type": "string",
+          "description": "自定义请求头 JSON 字符串，发送前由前端解析。"
+        },
+        "extraBodyJson": {
+          "type": "string",
+          "description": "合并到请求体的额外 JSON 字符串。"
+        },
+        "webSearch": {
+          "type": "object",
+          "required": ["enabled", "headersJson", "bodyJson"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "headersJson": { "type": "string" },
+            "bodyJson": {
+              "type": "string",
+              "description": "例如 {\"tools\":[{\"type\":\"web_search\"}]}，按服务商要求填写。"
+            }
+          },
+          "additionalProperties": false
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

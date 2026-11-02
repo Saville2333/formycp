@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cthulhu-table.local/schemas/character.schema.json",
+  "title": "Cthulhu Table Character",
+  "description": "PL 调查员与 KP 的非玩家角色共用的 CoC 7e 角色卡。",
+  "type": "object",
+  "required": [
+    "id",
+    "schemaVersion",
+    "kind",
+    "name",
+    "age",
+    "occupation",
+    "attributes",
+    "derived",
+    "skills",
+    "creditRating",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,80}$"
+    },
+    "schemaVersion": { "const": 1 },
+    "kind": { "enum": ["pc", "npc"] },
+    "isSample": { "type": "boolean" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "age": { "type": "integer", "minimum": 15, "maximum": 120 },
+    "gender": { "type": "string", "maxLength": 40 },
+    "occupation": { "type": "string", "maxLength": 80 },
+    "nationality": { "type": "string", "maxLength": 80 },
+    "appearance": { "type": "string", "maxLength": 4000 },
+    "heightCm": { "type": "number", "minimum": 0, "maximum": 300 },
+    "weightKg": { "type": "number", "minimum": 0, "maximum": 500 },
+    "personality": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string", "maxLength": 40 }
+    },
+    "catchphrase": { "type": "string", "maxLength": 200 },
+    "background": { "type": "string", "maxLength": 12000 },
+    "joinReason": { "type": "string", "maxLength": 4000 },
+    "importantPerson": { "type": "string", "maxLength": 2000 },
+    "ideology": { "type": "string", "maxLength": 2000 },
+    "significantPlace": { "type": "string", "maxLength": 2000 },
+    "treasuredItem": { "type": "string", "maxLength": 2000 },
+    "traits": { "type": "string", "maxLength": 4000 },
+    "phobias": { "type": "string", "maxLength": 4000 },
+    "motherTongue": { "type": "string", "maxLength": 80 },
+    "languages": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "required": ["name", "level"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "level": { "type": "integer", "minimum": 0, "maximum": 100 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "possessions": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "type": "string", "maxLength": 200 }
+    },
+    "attributes": {
+      "type": "object",
+      "required": ["str", "con", "siz", "dex", "app", "int", "pow", "edu"],
+      "properties": {
+        "str": { "$ref": "#/$defs/attribute" },
+        "con": { "$ref": "#/$defs/attribute" },
+        "siz": { "$ref": "#/$defs/attribute" },
+        "dex": { "$ref": "#/$defs/attribute" },
+        "app": { "$ref": "#/$defs/attribute" },
+        "int": { "$ref": "#/$defs/attribute" },
+        "pow": { "$ref": "#/$defs/attribute" },
+        "edu": { "$ref": "#/$defs/attribute" }
+      },
+      "additionalProperties": false
+    },
+    "luck": { "type": "integer", "minimum": 0, "maximum": 99 },
+    "derived": {
+      "type": "object",
+      "required": ["hp", "mp", "san", "mov", "db", "build"],
+      "properties": {
+        "hp": { "$ref": "#/$defs/pointPool" },
+        "mp": { "$ref": "#/$defs/pointPool" },
+        "san": { "$ref": "#/$defs/pointPool" },
+        "mov": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "db": {
+          "oneOf": [
+            { "type": "string", "maxLength": 20 },
+            { "type": "number" }
+          ]
+        },
+        "build": { "type": "integer", "minimum": -5, "maximum": 20 }
+      },
+      "additionalProperties": false
+    },
+    "skills": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "required": ["name", "total"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "base": { "type": "integer", "minimum": 0, "maximum": 999 },
+          "occupation": { "type": "integer", "minimum": 0, "maximum": 999 },
+          "interest": { "type": "integer", "minimum": 0, "maximum": 999 },
+          "total": { "type": "integer", "minimum": 0, "maximum": 999 },
+          "checked": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "creditRating": { "type": "integer", "minimum": 0, "maximum": 99 },
+    "occupationPoints": { "type": "integer", "minimum": 0, "maximum": 1000 },
+    "interestPoints": { "type": "integer", "minimum": 0, "maximum": 1000 },
+    "pointsSpent": {
+      "type": "object",
+      "properties": {
+        "occupation": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "interest": { "type": "integer", "minimum": 0, "maximum": 1000 }
+      },
+      "additionalProperties": false
+    },
+    "notes": { "type": "string", "maxLength": 12000 },
+    "portrait": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "null" }
+      ]
+    },
+    "npcDetails": {
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "maxLength": 200 },
+        "attitude": { "type": "string", "maxLength": 200 },
+        "publicDescription": { "type": "string", "maxLength": 4000 },
+        "secrets": { "type": "string", "maxLength": 8000 },
+        "keeperNotes": { "type": "string", "maxLength": 8000 }
+      },
+      "additionalProperties": false
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "attribute": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 99
+    },
+    "pointPool": {
+      "type": "object",
+      "required": ["current", "max"],
+      "properties": {
+        "current": { "type": "integer", "minimum": 0, "maximum": 999 },
+        "max": { "type": "integer", "minimum": 0, "maximum": 999 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

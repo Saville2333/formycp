@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-reduce-motion="false">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#07100d">
+  <meta name="description" content="Cthulhu Table —— 纯前端、本地优先的克苏鲁的呼唤第七版 AI 跑团桌面。">
+  <title>Cthulhu Table · 克苏鲁跑团桌面</title>
+  <link rel="icon" href="assets/sigil.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/main.css">
+  <style>
+    /* 首屏防白闪：即使 CSS 尚未解析也保持深色 */
+    html, body { background: #07100d; color: #ded4bc; }
+    .boot-screen {
+      position: fixed; inset: 0; z-index: 9999;
+      display: grid; place-items: center; gap: 20px;
+      background: radial-gradient(circle at 50% 42%, #10231b 0%, #07100d 62%);
+      transition: opacity .45s ease, visibility .45s ease;
+    }
+    .boot-screen.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+    .boot-inner { display: grid; justify-items: center; gap: 14px; text-align: center; }
+    .boot-sigil { width: 78px; height: 78px; animation: bootTurn 14s linear infinite; }
+    .boot-kicker { margin: 0; color: #b69b62; font: 600 11px/1.4 Georgia, serif; letter-spacing: .32em; text-transform: uppercase; }
+    .boot-title { margin: 0; color: #e3d8bf; font: 500 20px/1.3 "Noto Serif SC", "Songti SC", SimSun, serif; letter-spacing: .1em; }
+    .boot-note { margin: 0; max-width: 440px; color: #7f8b7d; font: 12px/1.8 "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+    .boot-note code { color: #c8ad75; }
+    .boot-hint { display: none; max-width: 560px; padding: 14px 18px; border: 1px solid rgba(177, 65, 64, .5); background: rgba(74, 25, 26, .3); color: #cfb9a2; text-align: left; }
+    .boot-hint.is-visible { display: block; }
+    @keyframes bootTurn { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .boot-sigil { animation: none; } }
+  </style>
+</head>
+<body class="is-booting">
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+  <div class="boot-screen" id="boot-screen" role="status" aria-live="polite">
+    <div class="boot-inner">
+      <img class="boot-sigil" src="assets/sigil.svg" alt="">
+      <p class="boot-kicker">Cthulhu Table</p>
+      <h1 class="boot-title">正在唤醒旧日</h1>
+      <p class="boot-note" id="boot-note">正在检查本地档案与守秘人桌面……</p>
+      <div class="boot-hint" id="file-protocol-hint">
+        <strong>需要通过 HTTP 打开。</strong><br>
+        浏览器出于安全策略，禁止 <code>file://</code> 页面加载 ES Module。请双击项目根目录的
+        <code>启动本地预览.bat</code>，或使用任意静态文件服务器打开本项目。部署到 GitHub Pages 后不受此限制。
+      </div>
+    </div>
+  </div>
+
+  <div class="app-shell" id="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="主导航">
+      <div class="sidebar__brand">
+        <a class="brand" href="#/home" aria-label="Cthulhu Table 首页">
+          <span class="brand__mark"><img src="assets/sigil.svg" alt=""></span>
+          <span class="brand__type">
+            <span class="brand__name">Cthulhu Table</span>
+            <span class="brand__sub">克苏鲁跑团桌面 · 7E</span>
+          </span>
+        </a>
+        <button class="icon-btn sidebar__close" type="button" data-action="close-nav" aria-label="关闭导航">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+        </button>
+      </div>
+
+      <nav class="nav">
+        <p class="nav__label">战役</p>
+        <a class="nav__link" href="#/home" data-route="/home">
+          <svg class="icon" aria-hidden="true"><use href="#i-home"></use></svg>
+          <span>战役总览</span>
+        </a>
+        <a class="nav__link" href="#/characters" data-route="/characters">
+          <svg class="icon" aria-hidden="true"><use href="#i-users"></use></svg>
+          <span>调查员名册</span>
+          <span class="nav__count" data-nav-count="characters">0</span>
+        </a>
+        <a class="nav__link" href="#/modules" data-route="/modules">
+          <svg class="icon" aria-hidden="true"><use href="#i-book"></use></svg>
+          <span>模组档案</span>
+        </a>
+        <a class="nav__link" href="#/table" data-route="/table">
+          <svg class="icon" aria-hidden="true"><use href="#i-table"></use></svg>
+          <span>跑团桌面</span>
+          <span class="nav__dot" title="尚未开始"></span>
+        </a>
+
+        <p class="nav__label nav__label--tools">工具</p>
+        <a class="nav__link" href="#/builder" data-route="/builder">
+          <svg class="icon" aria-hidden="true"><use href="#i-dice"></use></svg>
+          <span>车卡工坊</span>
+        </a>
+        <a class="nav__link" href="#/settings" data-route="/settings">
+          <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+          <span>设置与接口</span>
+        </a>
+      </nav>
+
+      <div class="campaign-slot">
+        <p class="campaign-slot__label">当前战役</p>
+        <p class="campaign-slot__title">尚无进行中的战役</p>
+        <a class="campaign-slot__link" href="#/modules">
+          选择一份模组
+          <svg class="icon icon--sm" aria-hidden="true"><use href="#i-arrow-right"></use></svg>
+        </a>
+      </div>
+
+      <div class="sidebar__foot">
+        <span class="local-seal" title="所有数据仅保存在此浏览器">
+          <svg class="icon icon--sm" aria-hidden="true"><use href="#i-shield"></use></svg>
+          本地保险库
+        </span>
+        <span class="version">v0.1.0 · 第一阶段</span>
+      </div>
+    </aside>
+
+    <button class="nav-scrim" type="button" data-action="close-nav" tabindex="-1" aria-label="关闭导航遮罩"></button>
+
+    <div class="shell-main">
+      <header class="topbar">
+        <div class="topbar__left">
+          <button class="icon-btn topbar__menu" type="button" data-action="open-nav" aria-label="打开导航" aria-controls="sidebar" aria-expanded="false">
+            <svg class="icon" aria-hidden="true"><use href="#i-menu"></use></svg>
+          </button>
+          <div class="crumb">
+            <span class="crumb__root">Cthulhu Table</span>
+            <span class="crumb__sep">/</span>
+            <span class="crumb__current" id="topbar-title">战役总览</span>
+          </div>
+        </div>
+        <div class="topbar__right">
+          <span class="connection-pill" id="connection-pill">
+            <span class="connection-pill__dot"></span>
+            <span>纯本地</span>
+          </span>
+          <a class="icon-btn" href="#/settings" aria-label="打开设置">
+            <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+          </a>
+        </div>
+      </header>
+
+      <main id="main-content" class="view" tabindex="-1" aria-live="polite"></main>
+
+      <footer class="app-footer">
+        <p>所有战役数据只保存在你的浏览器中。请定期导出备份。</p>
+        <p class="app-footer__sigil">“Ph'nglui mglw'nafh Cthulhu R'lyeh wgah'nagl fhtagn.”</p>
+      </footer>
+    </div>
+  </div>
+
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="false"></div>
+
+  <dialog class="modal" id="app-dialog" aria-labelledby="modal-title">
+    <div class="modal__frame">
+      <button class="icon-btn modal__close" type="button" data-close-dialog aria-label="关闭对话框">
+        <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+      </button>
+      <header class="modal__head">
+        <p class="modal__eyebrow" id="modal-eyebrow"></p>
+        <h2 class="modal__title" id="modal-title"></h2>
+      </header>
+      <div class="modal__body" id="modal-body"></div>
+      <footer class="modal__foot" id="modal-foot" hidden></footer>
+    </div>
+  </dialog>
+
+  <!-- 内联图标库：不依赖任何 CDN -->
+  <svg class="svg-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.8 12 3l9 7.8"/><path d="M5.5 9.2V21h13V9.2"/><path d="M9.5 21v-6h5v6"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.1"/><path d="M2.8 20c.4-3.6 2.9-5.8 6.2-5.8s5.8 2.2 6.2 5.8"/><path d="M16 5.3a3.1 3.1 0 0 1 0 6.1"/><path d="M18.2 14.6c1.9.7 3 2.5 3.3 5.4"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4.8A2.8 2.8 0 0 1 6.8 2H20v20H6.8A2.8 2.8 0 0 1 4 19.2z"/><path d="M4 19.2A2.8 2.8 0 0 1 6.8 17H20"/><path d="M8 6.5h8M8 10h6"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><path d="M21 14.5a4 4 0 0 1-4 4H8l-5 3V6.5a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M7.5 8.5h9M7.5 12h5.5"/></symbol>
+    <symbol id="i-dice" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3"/><circle cx="8.2" cy="8.2" r=".9" fill="currentColor" stroke="none"/><circle cx="15.8" cy="8.2" r=".9" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r=".9" fill="currentColor" stroke="none"/><circle cx="8.2" cy="15.8" r=".9" fill="currentColor" stroke="none"/><circle cx="15.8" cy="15.8" r=".9" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1-2.9 2.9-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21h-4v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1-2.9-2.9.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3v-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1 2.9-2.9.1.1a1.6 1.6 0 0 0 1.8.3 1.6 1.6 0 0 0 1-1.5V3h4v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1 2.9 2.9-.1.1a1.6 1.6 0 0 0-.3 1.8 1.6 1.6 0 0 0 1.5 1H21v4h-.1a1.6 1.6 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3.5 7h17M3.5 12h17M3.5 17h17"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="m5 5 14 14M19 5 5 19"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h15"/><path d="m13.5 6.5 6 5.5-6 5.5"/></symbol>
+    <symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M6.5 17.5 17.5 6.5"/><path d="M8 6.5h9.5V16"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V3.8"/><path d="m7.5 8.3 4.5-4.5 4.5 4.5"/><path d="M4 15.5V20h16v-4.5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3.8V16"/><path d="m7.5 11.5 4.5 4.5 4.5-4.5"/><path d="M4 15.5V20h16v-4.5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.7 3.1 7.9 7.5 9.5 4.4-1.6 7.5-4.8 7.5-9.5V6z"/><path d="m8.7 12 2.2 2.2 4.4-4.5"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="11" rx="2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/><path d="M12 14v3"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15.5" r="4"/><path d="m11 12.5 8.5-8.5M16 7.5l2.5 2.5M18.5 5l2.5 2.5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12.5 5.2 5.2L20 6.5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5 21 20H3z"/><path d="M12 9v5M12 17.2v.2"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 6.5h15M9 3.5h6M7 6.5 8 21h8l1-14.5M10 10v7M14 10v7"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2.5c.6 5.7 3.3 8.4 9 9-5.7.6-8.4 3.3-9 9-.6-5.7-3.3-8.4-9-9 5.7-.6 8.4-3.3 9-9Z"/><path d="M19 2.5v3M17.5 4h3M4.5 17.5v3M3 19h3"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 2.5h8l4 4V21.5H6z"/><path d="M14 2.5v4h4M9 12h6M9 16h6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 5.8a5 5 0 0 0-7.1 0L12 7.5l-1.7-1.7a5 5 0 1 0-7.1 7.1L12 21l8.8-8.1a5 5 0 0 0 0-7.1Z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="7.3"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20.5 11A8.5 8.5 0 1 0 18 17.1"/><path d="M20.5 4v7h-7"/></symbol>
+    <symbol id="i-wand" viewBox="0 0 24 24"><path d="m4 20 11-11"/><path d="m13.5 6.5 4 4"/><path d="M18 2.5v4M16 4.5h4M5 4v3M3.5 5.5h3M20 14v3M18.5 15.5h3"/></symbol>
+    <symbol id="i-scroll" viewBox="0 0 24 24"><path d="M6 3h12a2 2 0 0 1 2 2v14.5H8A2 2 0 0 1 6 17.5z"/><path d="M6 17.5A2 2 0 0 0 8 19.5h12"/><path d="M9.5 7h7M9.5 10.5h5"/></symbol>
+  </svg>
+
+  <script>
+    // 在模块脚本加载失败时，给出可操作的提示，而不是永远停在启动页。
+    (function () {
+      var isFile = location.protocol === 'file:';
+      if (isFile) {
+        document.getElementById('file-protocol-hint').classList.add('is-visible');
+        document.getElementById('boot-note').textContent = '检测到 file:// 协议，浏览器阻止了 ES Module 加载。';
+      }
+      window.setTimeout(function () {
+        if (document.body.classList.contains('is-booting')) {
+          var note = document.getElementById('boot-note');
+          if (note && !isFile) note.textContent = '加载时间超出预期。请打开开发者工具查看控制台错误。';
+          if (isFile) document.getElementById('file-protocol-hint').classList.add('is-visible');
+        }
+      }, 6000);
+    })();
+  </script>
+  <script type="module" src="js/app.js"></script>
+  <noscript>
+    <div class="noscript">Cthulhu Table 需要启用 JavaScript 才能运行。</div>
+  </noscript>
+</body>
+</html>
