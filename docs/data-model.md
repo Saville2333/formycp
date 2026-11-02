@@ -167,7 +167,7 @@ Settings
 ├── app { reduceMotion, lastRoute }
 ├── api
 │   ├── profiles[]
-│   │   ├── name / baseUrl / apiKey / model
+│   │   ├── provider / name / baseUrl / apiKey / model
 │   │   ├── temperature / maxTokens / topP / stream
 │   │   ├── headersJson / extraBodyJson
 │   │   └── webSearch { enabled, headersJson, bodyJson }
@@ -183,6 +183,8 @@ Settings
 
 `api.presets` 保存可复用的 URL / Key / 模型名；内置服务商只提供 URL 与模型，不包含 Key。`moduleCheckProfileId` 指向用于模组导入审计的接口配置，推荐 DeepSeek：
 `https://api.deepseek.com/v1` + `deepseek-chat`。AI 审计结果写入 `module.aiAudit`，不会覆盖原文。
+
+`/models` 的检测结果不写入 Settings；前端在 `model-catalog.js` 中按提供商分组，并用参考价格目录（USD / 1M tokens）在组内升序展示。价格可能过时，只作为模型选择参考。
 
 ## 7. localStorage 键位
 

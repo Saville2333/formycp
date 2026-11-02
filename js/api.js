@@ -165,6 +165,40 @@ export function endpointHost(profile) {
   }
 }
 
+/** 取得不带 /chat/completions 的接口根地址，用于 GET /models。 */
+export function normalizeRootUrl(baseUrl) {
+  const chatUrl = normalizeBaseUrl(baseUrl);
+  const parsed = new URL(chatUrl);
+  parsed.pathname = parsed.pathname.replace(/\/chat\/completions$/i, '');
+  return parsed.toString().replace(/\/$/, '');
+}
+
+export function modelsEndpointForProfile(profile) {
+  return `${normalizeRootUrl(profile?.baseUrl || API_DEFAULTS.baseUrl)}/models`;
+}
+
+/** 某些服务商（如 DeepSeek）的 /models 不带 /v1；404 时尝试兼容路径。 */
+export function modelsEndpointCandidates(profile) {
+  const primary = modelsEndpointForProfile(profile);
+  const candidates = [primary];
+  try {
+    const primaryUrl = new URL(primary);
+    const path = primaryUrl.pathname;
+    if (/\/v1\/models$/i.test(path)) {
+      const alternate = new URL(primary);
+      alternate.pathname = path.replace(/\/v1\/models$/i, '/models');
+      candidates.push(alternate.toString());
+    } else if (/\/models$/i.test(path) && !/\/v1\/models$/i.test(path)) {
+      const alternate = new URL(primary);
+      alternate.pathname = path.replace(/\/models$/i, '/v1/models');
+      candidates.push(alternate.toString());
+    }
+  } catch {
+    // 主地址已经会在请求阶段给出可读错误。
+  }
+  return [...new Set(candidates)];
+}
+
 /* =========================================================
  * SSE 解析
  * ========================================================= */
@@ -345,11 +379,14 @@ async function requestWithRetry(url, initFactory, { retries = 2, signal, timeout
         attempt += 1;
         continue;
       }
-      throw new ApiError(`网络请求失败：${error.message}`, {
-        code: 'NETWORK_ERROR',
-        retryable: true,
-        cause: error,
-      });
+      throw new ApiError(
+        `网络请求失败：${error.message}。常见原因：Base URL 错误、API Key 无效、服务商未开启浏览器 CORS，或当前网络无法访问该地址。纯前端无法绕过服务端 CORS。`,
+        {
+          code: 'NETWORK_ERROR',
+          retryable: true,
+          cause: error,
+        }
+      );
     }
   }
   throw new ApiError('请求重试次数耗尽。', { code: 'RETRY_EXHAUSTED' });
@@ -571,6 +608,110 @@ export async function chat(profile, messages, options = {}) {
 }
 
 /**
+ * 读取接口的 /models 列表。
+ * 返回原始模型数组；服务商分组与参考价格排序在 model-catalog.js 中完成。
+ */
+export async function listModels(
+  profile,
+  { signal, timeoutMs = 30000, retries = 1 } = {}
+) {
+  const startedAt = performance.now();
+  const headers = buildHeaders(profile, { useWebSearch: false });
+  headers.Accept = 'application/json';
+  const candidates = modelsEndpointCandidates(profile);
+  let lastError = null;
+  let endpoint = candidates[0];
+  let payload = null;
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    endpoint = candidates[index];
+    try {
+      const response = await requestWithRetry(
+        endpoint,
+        () => ({
+          method: 'GET',
+          headers,
+        }),
+        { retries, signal, timeoutMs }
+      );
+      payload = await response.json();
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+      if (error instanceof ApiError && error.status === 404 && index < candidates.length - 1) {
+        continue;
+      }
+      break;
+    }
+  }
+
+  try {
+    if (lastError) throw lastError;
+    const rawList = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload?.models)
+          ? payload.models
+          : [];
+    const models = rawList
+      .map((model) => {
+        if (typeof model === 'string') return { id: model, name: model };
+        if (!model || typeof model !== 'object') return null;
+        const id = String(model.id || model.name || '').trim();
+        if (!id) return null;
+        return {
+          id,
+          name: String(model.name || id),
+          ownedBy: model.owned_by || model.ownedBy || '',
+          pricing: model.pricing || null,
+          created: model.created || null,
+          raw: model,
+        };
+      })
+      .filter(Boolean);
+    const durationMs = Math.round(performance.now() - startedAt);
+    void logRequest(profile, {
+      category: 'models',
+      durationMs,
+      status: 200,
+      success: true,
+      usage: null,
+    });
+    return {
+      models,
+      endpoint,
+      durationMs,
+      raw: payload,
+    };
+  } catch (error) {
+    const durationMs = Math.round(performance.now() - startedAt);
+    void logRequest(profile, {
+      category: 'models',
+      durationMs,
+      status: error.status || 0,
+      success: false,
+      error: error.message,
+    });
+    if (error instanceof ApiError) {
+      if (error.status === 404) {
+        throw new ApiError(
+          '该接口没有提供 /models 端点（404）。你仍然可以手动填写模型名。',
+          { code: 'MODELS_UNSUPPORTED', status: 404, retryable: false, body: error.body }
+        );
+      }
+      throw error;
+    }
+    if (error?.name === 'AbortError') throw error;
+    throw new ApiError(
+      `无法读取模型列表：${error.message}。请检查 Base URL、Key、CORS 或接口是否支持 /models。`,
+      { code: 'MODELS_FAILED', retryable: false, cause: error }
+    );
+  }
+}
+
+/**
  * 连通性测试：请求一个极短的回复。
  */
 export async function testConnection(profile, { signal, timeoutMs = 30000 } = {}) {
@@ -598,10 +739,14 @@ export const api = Object.freeze({
   streamChat,
   chat,
   testConnection,
+  listModels,
   buildHeaders,
   buildRequestBody,
   endpointForProfile,
+  modelsEndpointForProfile,
+  modelsEndpointCandidates,
   normalizeBaseUrl,
+  normalizeRootUrl,
   createSseParser,
   isAbortError,
   ApiError,

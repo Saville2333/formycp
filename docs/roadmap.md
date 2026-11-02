@@ -35,6 +35,7 @@
 
 - [x] 多套 OpenAI Chat Completions 兼容配置
 - [x] URL / Key / 模型名接口预设：保存、复用、内置 DeepSeek 快捷填入
+- [x] 输入 Key 后检测 `/models`，按提供商分组、组内按参考价格升序
 - [x] 自定义 baseURL / 请求头 / 额外请求体
 - [x] SSE 流式解析与逐字渲染
 - [x] 联网开关（可配置 tools / header / body）

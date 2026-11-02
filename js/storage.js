@@ -240,6 +240,7 @@ export function normalizeApiProfile(input = {}) {
   const profile = isPlainObject(input) ? clone(input) : {};
   return {
     id: typeof profile.id === 'string' && profile.id ? profile.id : createId('api'),
+    provider: typeof profile.provider === 'string' ? profile.provider : 'custom',
     name: typeof profile.name === 'string' && profile.name.trim() ? profile.name.trim() : '未命名接口',
     baseUrl: typeof profile.baseUrl === 'string' ? profile.baseUrl.trim() : 'https://api.openai.com/v1',
     apiKey: typeof profile.apiKey === 'string' ? profile.apiKey : '',

@@ -5,6 +5,12 @@
 import { storage, normalizeApiProfile, normalizeApiPreset } from '../storage.js';
 import { api } from '../api.js';
 import {
+  groupModels,
+  formatPrice,
+  PRICE_NOTE,
+  PROVIDER_META,
+} from '../model-catalog.js';
+import {
   escapeHTML,
   icon,
   formatBytes,
@@ -71,6 +77,7 @@ function pageHead(actions = '') {
 
 function profileCard(profile, activeId) {
   const active = profile.id === activeId;
+  const providerLabel = PROVIDER_META[profile.provider]?.label || profile.provider || '自定义';
   return `<article class="api-profile ${active ? 'is-active' : ''}">
     <div class="api-profile__head">
       <div class="api-profile__glyph">${icon('key')}</div>
@@ -82,6 +89,7 @@ function profileCard(profile, activeId) {
       </div>
     </div>
     <div class="api-profile__meta">
+      <span>${escapeHTML(providerLabel)}</span>
       <span>温度 ${escapeHTML(profile.temperature)}</span>
       <span>Max ${formatNumber(profile.maxTokens)}</span>
       <span>Top P ${escapeHTML(profile.topP)}</span>
@@ -145,9 +153,16 @@ function profileForm(profile) {
     <label class="form-field"><span class="form-field__label">Base URL</span><input class="form-input" id="api-base-url" value="${escapeHTML(
       profile.baseUrl || 'https://api.openai.com/v1'
     )}" placeholder="https://api.openai.com/v1"></label>
-    <label class="form-field"><span class="form-field__label">Model</span><input class="form-input" id="api-model" value="${escapeHTML(
-      profile.model || ''
-    )}" placeholder="gpt-4o-mini / deepseek-chat"></label>
+    <label class="form-field form-field--wide"><span class="form-field__label">Model</span>
+      <span class="model-input-row">
+        <input class="form-input" id="api-model" value="${escapeHTML(
+          profile.model || ''
+        )}" placeholder="gpt-4o-mini / deepseek-chat">
+        <button class="btn btn--gold btn--sm" type="button" data-detect-models>${icon(
+          'search'
+        )} 检测模型</button>
+      </span>
+    </label>
     <label class="form-field"><span class="form-field__label">API Key</span><input class="form-input" id="api-key" type="password" value="${escapeHTML(
       profile.apiKey || ''
     )}" placeholder="sk-..." autocomplete="off"></label>
@@ -164,6 +179,8 @@ function profileForm(profile) {
       profile.stream !== false ? 'checked' : ''
     }> SSE 逐字渲染</span></label>
   </div>
+
+  <div class="model-picker" id="model-picker" hidden></div>
 
   <div class="settings-subsection">
     <h4 class="settings-subsection__title">${icon('key')} 自定义请求头 / 额外请求体</h4>
@@ -285,10 +302,10 @@ function openPresetLibrary(ctx) {
             provider: preset.provider,
           });
           settingsNow.api.profiles.push(profile);
-          if (!settingsNow.api.activeProfileId) settingsNow.api.activeProfileId = profile.id;
+          settingsNow.api.activeProfileId = profile.id;
           storage.settings.save(settingsNow);
           closeModal();
-          toast(`已从预设创建接口「${profile.name}」。`, { type: 'success' });
+          toast(`已从预设创建接口「${profile.name}」，并设为当前接口。`, { type: 'success' });
           ctx.refresh();
         });
       });
@@ -322,11 +339,13 @@ function openPresetLibrary(ctx) {
 function collectProfile(dialog, existing) {
   const value = (id) => dialog.querySelector(`#${id}`)?.value ?? '';
   const checked = (id) => Boolean(dialog.querySelector(`#${id}`)?.checked);
+  const baseUrl = value('api-base-url');
   const profile = normalizeApiProfile({
     ...existing,
     id: existing?.id,
+    provider: existing?.provider || providerFromBaseUrl(baseUrl),
     name: value('api-name'),
-    baseUrl: value('api-base-url'),
+    baseUrl,
     model: value('api-model'),
     apiKey: value('api-key'),
     temperature: Number(value('api-temperature')),
@@ -414,6 +433,7 @@ export const settingsView = {
             <p class="privacy-note__title">${icon('lock')} API Key 只存本地</p>
             <p class="privacy-note__text">密钥写入 localStorage，并通过前端 fetch 直连你填写的接口地址。本站没有后端，也不会上传密钥。公共电脑使用后请清除浏览器数据。</p>
           </div>
+          <p class="form-help" style="margin-top:12px;">如果「测试连接」提示 Failed to fetch，请先确认 Base URL 与 Key；若地址本身可用，通常是服务商未允许浏览器 CORS。纯前端应用不能绕过服务端 CORS。</p>
         </section>
 
         <section class="settings-card">
@@ -730,11 +750,47 @@ export const settingsView = {
   },
 };
 
+function modelPickerMarkup(groups, currentModel = '') {
+  if (!groups.length) {
+    return `<div class="model-picker__empty">${icon(
+      'alert'
+    )} 接口没有返回可用模型。你仍然可以手动填写模型名。</div>`;
+  }
+  return `<div class="model-picker__head">
+      <strong>${icon('spark')} 可用模型</strong>
+      <span>${PRICE_NOTE}</span>
+    </div>
+    ${groups
+      .map(
+        (group) => `<section class="model-group">
+          <h5 class="model-group__title">${escapeHTML(group.label)} <span>${group.models.length}</span></h5>
+          <div class="model-group__list">
+            ${group.models
+              .map(
+                (model) => `<button class="model-option ${
+                  model.id === currentModel ? 'is-selected' : ''
+                }" type="button" data-select-model="${escapeHTML(model.id)}">
+                  <span class="model-option__id">${escapeHTML(model.id)}</span>
+                  <span class="model-option__price ${model.price ? '' : 'is-unknown'}">${escapeHTML(
+                    formatPrice(model.price)
+                  )}${model.price?.source === 'api' ? ' · 接口价' : ''}</span>
+                </button>`
+              )
+              .join('')}
+          </div>
+        </section>`
+      )
+      .join('')}`;
+}
+
 function providerFromBaseUrl(baseUrl) {
   const value = String(baseUrl || '').toLowerCase();
   if (value.includes('deepseek')) return 'deepseek';
   if (value.includes('openrouter')) return 'openrouter';
   if (value.includes('siliconflow')) return 'siliconflow';
+  if (value.includes('anthropic')) return 'anthropic';
+  if (value.includes('google') || value.includes('generativelanguage')) return 'google';
+  if (value.includes('moonshot')) return 'moonshotai';
   if (value.includes('openai')) return 'openai';
   return 'custom';
 }
@@ -769,6 +825,8 @@ function openProfileEditor(existing, ctx, { provider = '' } = {}) {
           set('api-name', preset.name);
           set('api-base-url', preset.baseUrl);
           set('api-model', preset.model);
+          const picker = dialog.querySelector('#model-picker');
+          if (picker) picker.hidden = true;
           toast(`已填入 ${preset.name} 的 URL 与模型；请补充 API Key。`, {
             type: 'info',
             duration: 3500,
@@ -776,17 +834,86 @@ function openProfileEditor(existing, ctx, { provider = '' } = {}) {
         });
       });
 
+      dialog.querySelector('[data-detect-models]')?.addEventListener('click', async (event) => {
+        const button = event.currentTarget;
+        const picker = dialog.querySelector('#model-picker');
+        const baseUrl = dialog.querySelector('#api-base-url')?.value?.trim() || '';
+        const apiKey = dialog.querySelector('#api-key')?.value || '';
+        const headersJson = dialog.querySelector('#api-headers')?.value || '{}';
+        const currentModel = dialog.querySelector('#api-model')?.value || '';
+        if (!baseUrl) return toast('请先填写 Base URL。', { type: 'error' });
+        const original = button.innerHTML;
+        button.disabled = true;
+        button.textContent = '检测中…';
+        if (picker) {
+          picker.hidden = false;
+          picker.innerHTML = `<div class="model-picker__loading">${icon(
+            'refresh'
+          )} 正在请求 /models，部分服务商可能不支持该端点…</div>`;
+        }
+        try {
+          const result = await api.listModels(
+            {
+              baseUrl,
+              apiKey,
+              headersJson,
+              webSearch: { enabled: false },
+            },
+            { retries: 1 }
+          );
+          const groups = groupModels(result.models, {
+            fallbackProvider: providerFromBaseUrl(baseUrl),
+            baseUrl,
+          });
+          if (picker) {
+            picker.innerHTML = modelPickerMarkup(groups, currentModel);
+            picker.querySelectorAll('[data-select-model]').forEach((option) => {
+              option.addEventListener('click', () => {
+                const modelInput = dialog.querySelector('#api-model');
+                if (modelInput) modelInput.value = option.dataset.selectModel;
+                picker.querySelectorAll('[data-select-model]').forEach((item) => {
+                  item.classList.toggle('is-selected', item === option);
+                });
+                toast(`已选择模型：${option.dataset.selectModel}`, {
+                  type: 'success',
+                  duration: 2500,
+                });
+              });
+            });
+          }
+          toast(`检测到 ${result.models.length} 个模型，已按服务商与参考价格分组。`, {
+            type: 'success',
+            duration: 4000,
+          });
+        } catch (error) {
+          if (picker) {
+            picker.innerHTML = `<div class="model-picker__error">${icon(
+              'alert'
+            )} ${escapeHTML(error.message)}<br><span>你仍然可以手动填写模型名。</span></div>`;
+          }
+          toast(`模型检测失败：${error.message}`, { type: 'error', duration: 7000 });
+        } finally {
+          button.disabled = false;
+          button.innerHTML = original;
+        }
+      });
+
       dialog.querySelector('[data-save-profile]')?.addEventListener('click', () => {
         try {
           const next = collectProfile(dialog, existing);
           const settings = storage.settings.get();
           const index = settings.api.profiles.findIndex((item) => item.id === next.id);
-          if (index >= 0) settings.api.profiles[index] = next;
+          const isNew = index < 0;
+          if (!isNew) settings.api.profiles[index] = next;
           else settings.api.profiles.push(next);
-          if (!settings.api.activeProfileId) settings.api.activeProfileId = next.id;
+          // 新建接口默认设为当前接口，避免“保存了但守秘人仍在用旧配置”的困惑。
+          if (isNew || !settings.api.activeProfileId) settings.api.activeProfileId = next.id;
           storage.settings.save(settings);
           closeModal();
-          toast('接口配置已保存。', { type: 'success' });
+          toast(
+            isNew ? '接口配置已保存，并设为当前接口。' : '接口配置已保存。',
+            { type: 'success' }
+          );
           ctx.refresh();
         } catch (error) {
           toast(error.message, { type: 'error', duration: 6000 });
