@@ -17,6 +17,12 @@ import {
 } from '../dice.js';
 import { buildKpContext, computeProgress, parseKpStateBlock, mergeKpState } from '../kp.js';
 import { findScene } from '../module.js';
+import { generateActorAction } from '../actor.js';
+import {
+  summarizeCampaignMemories,
+  attachMemoriesToCharacters,
+  memoryToWorldbookEntry,
+} from '../memory.js';
 import {
   escapeHTML,
   icon,
@@ -36,8 +42,10 @@ let chat = null;
 let characters = [];
 let selectedCharacterId = '';
 let sending = false;
+let actorBusy = false;
 let abortController = null;
 let currentProfile = null;
+let worldbookEntries = [];
 
 const DIFFICULTY_ALIASES = {
   regular: 'regular',
@@ -120,6 +128,9 @@ async function loadTableState() {
   chat.messages = Array.isArray(chat.messages) ? chat.messages : [];
   campaign.kpState = campaign.kpState || {};
   currentProfile = storage.settings.getActiveApiProfile();
+  worldbookEntries = await storage.worldbook
+    .forContext(campaign.id, characters.map((character) => character.id))
+    .catch(() => []);
 }
 
 function renderSetup() {
@@ -214,7 +225,9 @@ function messageMarkup(message) {
     message.id
   )}">
     <div class="chat-message__head">
-      <span class="chat-message__speaker">${escapeHTML(speaker)}</span>
+      <span class="chat-message__speaker">${escapeHTML(speaker)}${
+        message.meta?.aiActor ? ' · AI 代演' : ''
+      }</span>
       <span class="chat-message__time">${escapeHTML(messageTime(message.createdAt))}</span>
     </div>
     <div class="chat-message__text" data-message-text>${escapeHTML(message.content)}</div>
@@ -363,6 +376,10 @@ function renderTable() {
       <button class="btn btn--ghost" type="button" data-action="export-campaign">${icon(
         'upload'
       )} 导出</button>
+      <a class="icon-btn" href="#/worldbook" title="世界书">${icon('book')}</a>
+      <button class="btn btn--gold btn--sm" type="button" data-action="finalize-campaign">${icon(
+        'scroll'
+      )} 完结战役</button>
       <a class="icon-btn" href="#/settings" title="接口设置">${icon('settings')}</a>
     </div>
   </header>
@@ -440,13 +457,18 @@ function renderTable() {
         </div>
         <div class="composer">
           <textarea class="composer__input" id="chat-input" rows="3" placeholder="描述你的行动，或使用 /r /c /san /luck 命令……" ${
-            sending ? 'disabled' : ''
+            sending || actorBusy ? 'disabled' : ''
           }></textarea>
           <div class="composer__bar">
-            <span class="composer__hint">ENTER 发送 · SHIFT+ENTER 换行 · 检定结果自动进入上下文</span>
-            <button class="btn btn--primary composer__send" type="button" data-action="send-message" ${
-              sending ? 'disabled' : ''
-            }>${icon('arrow-right')} 发送</button>
+            <span class="composer__hint">ENTER 发送 · SHIFT+ENTER 换行 · AI 代演：≤100字并自动检定</span>
+            <div class="composer__actions">
+              <button class="btn btn--gold btn--sm" type="button" data-action="ai-actor" ${
+                !currentProfile || sending || actorBusy ? 'disabled' : ''
+              }>${icon('spark')} ${actorBusy ? '代演中…' : 'AI 代演 ≤100字'}</button>
+              <button class="btn btn--primary composer__send" type="button" data-action="send-message" ${
+                sending || actorBusy ? 'disabled' : ''
+              }>${icon('arrow-right')} 发送</button>
+            </div>
           </div>
         </div>
       </div>
@@ -620,6 +642,44 @@ function setSendingUi(value) {
   }
 }
 
+async function recordTurnLog(userMessage, assistant) {
+  if (!campaign) return;
+  try {
+    const scene = findScene(moduleData, campaign.kpState?.currentSceneId)?.scene;
+    const userIndex = chat.messages.findIndex((message) => message.id === userMessage.id);
+    const priorUserIndex = chat.messages
+      .slice(0, Math.max(0, userIndex))
+      .map((message) => message.role)
+      .lastIndexOf('user');
+    const turnSlice = chat.messages.slice(priorUserIndex + 1, userIndex);
+    const recentDice = [...turnSlice].reverse().find((message) => message.role === 'dice');
+    const content = [
+      `【${userMessage.speaker || '调查员'}】${userMessage.content}`,
+      recentDice ? `【骰子】${recentDice.content}` : '',
+      `【KP】${assistant.content}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+    const entry = await storage.worldbook.save({
+      campaignId: campaign.id,
+      moduleId: campaign.moduleId,
+      moduleTitle: moduleData?.title || campaign.moduleTitle || '',
+      type: 'log',
+      title: `${scene?.title || '场景'} · ${new Date().toLocaleString('zh-CN')}`,
+      content,
+      tags: [scene?.title, campaign.title, userMessage.speaker].filter(Boolean),
+      characterIds: [selectedCharacterId].filter(Boolean),
+      sceneId: campaign.kpState?.currentSceneId || '',
+      source: 'turn',
+      importance: 1,
+      includeInContext: true,
+    });
+    worldbookEntries = [entry, ...worldbookEntries.filter((item) => item.id !== entry.id)].slice(0, 120);
+  } catch (error) {
+    console.warn('[Cthulhu Table] 跑团日志写入世界书失败：', error);
+  }
+}
+
 async function runKpTurn(userMessage, ctx) {
   if (!currentProfile) {
     toast('尚未配置 AI 接口，无法请求守秘人。', { type: 'error', duration: 6000 });
@@ -635,6 +695,7 @@ async function runKpTurn(userMessage, ctx) {
     characters,
     history,
     userInput: userMessage.content,
+    worldbook: worldbookEntries,
     settings: storage.settings.get().kp,
   });
 
@@ -713,6 +774,7 @@ async function runKpTurn(userMessage, ctx) {
         duration: 6000,
       });
     }
+    await recordTurnLog(userMessage, assistant);
     // 重绘桌面，让场景标题、进度与线索面板与本回合状态同步。
     ctx?.refresh?.();
   } catch (error) {
@@ -730,11 +792,69 @@ async function runKpTurn(userMessage, ctx) {
   }
 }
 
+function setActorBusy(value) {
+  actorBusy = value;
+  const button = document.querySelector('[data-action="ai-actor"]');
+  const input = document.getElementById('chat-input');
+  if (button) {
+    button.disabled = value || sending || !currentProfile;
+    button.innerHTML = value ? `${icon('spark')} 代演中…` : `${icon('spark')} AI 代演 ≤100字`;
+  }
+  if (input) input.disabled = value || sending;
+}
+
+async function runActorTurn(ctx) {
+  if (actorBusy || sending) return;
+  const character = selectedCharacter();
+  if (!character) return toast('请先选择一位调查员。', { type: 'warning' });
+  if (!currentProfile) return toast('请先配置 AI 接口，才能使用 AI 代演。', { type: 'error' });
+  if (!moduleData) return toast('当前战役没有模组。', { type: 'error' });
+  setActorBusy(true);
+  try {
+    const action = await generateActorAction({
+      profile: currentProfile,
+      character,
+      campaign,
+      module: moduleData,
+      chat,
+      worldbook: worldbookEntries,
+    });
+    const skill = (character.skills || []).find((item) => item.name === action.skill);
+    if (!skill) throw new Error(`角色没有技能「${action.skill}」。`);
+    const check = cocCheck(skill.total, { difficulty: action.difficulty });
+    // 先写入自动检定，再写入角色行动；让 KP 同时看到骰子与角色台词/动作。
+    await addDiceMessage(
+      `${character.name} · ${action.skill} ${check.text}`,
+      { kind: 'check', check, skillName: action.skill, difficulty: action.difficulty },
+      false
+    );
+    const message = addMessage(
+      'user',
+      action.reply,
+      {
+        aiActor: true,
+        actorAction: action.action,
+        characterId: character.id,
+        autoCheck: { skill: action.skill, difficulty: action.difficulty, roll: check.roll },
+      },
+      character.name
+    );
+    appendMessageDom(message);
+    await persistChat();
+    setActorBusy(false);
+    await runKpTurn(message, ctx);
+  } catch (error) {
+    toast(`AI 代演失败：${error.message}`, { type: 'error', duration: 7000 });
+  } finally {
+    setActorBusy(false);
+  }
+}
+
 async function sendMessage(ctx) {
   const input = document.getElementById('chat-input');
   const text = String(input?.value || '').trim();
   if (!text) return;
-  if (sending) return;
+  if (sending || actorBusy) return;
   if (text.startsWith('/')) {
     input.value = '';
     await handleCommand(text, ctx);
@@ -976,6 +1096,10 @@ export const tableView = {
       await sendMessage(ctx);
     },
 
+    async 'ai-actor'(element, ctx) {
+      await runActorTurn(ctx);
+    },
+
     async 'abort-generation'() {
       abortController?.abort();
     },
@@ -1087,6 +1211,87 @@ export const tableView = {
           });
         },
       });
+    },
+
+    async 'finalize-campaign'(element, ctx) {
+      if (!campaign) return;
+      const ok = await confirmDialog({
+        eyebrow: '结束战役',
+        title: `完结《${campaign.title}》并总结角色记忆？`,
+        message:
+          'AI 会把本场模组压缩成每位调查员的长期记忆，写给角色卡与世界书；之后仍可查看本场记录。若接口不可用，会用 KP 状态生成基础记忆。',
+        confirmLabel: '总结并完结',
+        danger: false,
+      });
+      if (!ok) return;
+      const button = element;
+      const original = button.innerHTML;
+      button.disabled = true;
+      button.textContent = '总结记忆…';
+      try {
+        const result = await summarizeCampaignMemories({
+          profile: currentProfile,
+          campaign,
+          module: moduleData,
+          characters,
+          chat,
+          worldbook: worldbookEntries,
+        });
+        const updated = attachMemoriesToCharacters(characters, result.memories, {
+          campaign,
+          module: moduleData,
+        });
+        for (const character of updated) storage.characters.save(character);
+
+        // 清理本战役旧的 memory 世界书条目，避免重复总结堆积。
+        const oldEntries = await storage.worldbook
+          .list({ campaignId: campaign.id, type: 'memory' })
+          .catch(() => []);
+        for (const entry of oldEntries) await storage.worldbook.remove(entry.id);
+        for (const memory of result.memories) {
+          const character = updated.find((item) => item.id === memory.characterId);
+          if (!character) continue;
+          await storage.worldbook.save(
+            memoryToWorldbookEntry(memory, character, { campaign, module: moduleData })
+          );
+        }
+
+        campaign.status = 'completed';
+        campaign.completedAt = new Date().toISOString();
+        campaign.memorySummaries = result.memories;
+        campaign.updatedAt = new Date().toISOString();
+        storage.campaigns.save(campaign);
+
+        openModal({
+          eyebrow: 'Campaign Complete',
+          title: '角色记忆已写入世界书',
+          body: `<p class="modal-copy">${
+            result.aiCount
+              ? `已由 AI 总结 ${result.aiCount} 位调查员的记忆。`
+              : `AI 总结未完成，已使用本地状态生成记忆${result.error ? `：${escapeHTML(result.error)}` : ''}。`
+          }</p>
+          <div class="memory-list">${result.memories
+            .map((memory) => {
+              const character = updated.find((item) => item.id === memory.characterId);
+              return `<article class="memory-item"><div class="memory-item__head"><strong>${escapeHTML(
+                character?.name || memory.characterId
+              )}</strong></div><p class="memory-item__summary">${escapeHTML(
+                memory.summary
+              )}</p></article>`;
+            })
+            .join('')}</div>
+          <p class="modal-copy muted">下一次选择同一调查员开始新模组时，这些记忆会自动进入 KP 与 AI 代演上下文。</p>`,
+          footer: `<div class="modal-actions"><a class="btn btn--gold" href="#/worldbook">${icon(
+            'book'
+          )} 打开世界书</a><button class="btn btn--primary" type="button" data-close-dialog>完成</button></div>`,
+        });
+        ctx.refresh();
+      } catch (error) {
+        toast(`总结记忆失败：${error.message}`, { type: 'error', duration: 7000 });
+      } finally {
+        button.disabled = false;
+        button.innerHTML = original;
+      }
     },
 
     async 'save-game'() {

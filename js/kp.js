@@ -8,7 +8,7 @@
  * 4. 模型每次输出叙事后附带隐藏状态块，前端解析、校验、合并。
  */
 
-import { retrieveChunks, flattenScenes, findScene, moduleStats } from './module.js';
+import { retrieveChunks, flattenScenes, findScene, moduleStats, tokenize } from './module.js';
 
 export const KP_STATE_START = '[[KP_STATE]]';
 export const KP_STATE_END = '[[/KP_STATE]]';
@@ -354,13 +354,51 @@ function formatCharacters(characters) {
         .slice(0, 12)
         .map((skill) => `${skill.name} ${skill.total}`)
         .join('、');
+      const memories = (character.memories || [])
+        .slice(-3)
+        .map((memory) => `《${memory.moduleTitle || '过往模组'}》${memory.summary}`)
+        .join('；');
+      const roleplaySetting = String(character.detailedSetting || '').trim();
       return `### ${character.name}（${character.kind === 'npc' ? 'NPC' : 'PL'}）
 - 职业：${character.occupation || '未填写'}；年龄：${character.age || '?'}
 - HP ${derived.hp?.current ?? '?'}/${derived.hp?.max ?? '?'}；SAN ${derived.san?.current ?? '?'}/${derived.san?.max ?? '?'}；MP ${derived.mp?.current ?? '?'}/${derived.mp?.max ?? '?'}；MOV ${derived.mov ?? '?'}
 - 关键技能：${skills || '未记录'}
 - 重要物品：${(character.possessions || []).slice(0, 8).join('、') || '未记录'}
-- 人设摘要：${String(character.background || character.appearance || '').slice(0, 260)}`;
+- 人设摘要：${String(character.background || character.appearance || '').slice(0, 260)}
+${roleplaySetting ? `- 角色扮演设定摘要：${roleplaySetting.slice(0, 700)}` : ''}
+${memories ? `- 跨模组记忆：${memories}` : ''}`;
     })
+    .join('\n\n');
+}
+
+function selectWorldbookEntries(entries, query, characters, limit = 5) {
+  if (!Array.isArray(entries) || !entries.length) return [];
+  const characterIds = new Set((characters || []).map((character) => character.id));
+  const queryTokens = new Set(tokenize(query));
+  const scored = entries.map((entry) => {
+    const haystack = tokenize(`${entry.title || ''}\n${entry.content || ''}\n${(entry.tags || []).join(' ')}`);
+    let score = 0;
+    for (const token of queryTokens) {
+      if (haystack.includes(token)) score += 1;
+    }
+    if ((entry.characterIds || []).some((id) => characterIds.has(id))) score += 2;
+    if (entry.type === 'memory') score += 1.5;
+    if (entry.type === 'log') score += 0.5;
+    return { ...entry, _score: score };
+  });
+  scored.sort((a, b) => b._score - a._score || Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  return scored.slice(0, Math.max(1, Math.min(12, limit)));
+}
+
+function formatWorldbook(entries) {
+  if (!entries?.length) return '（暂无相关世界书记录。）';
+  return entries
+    .map(
+      (entry, index) =>
+        `### 世界书 ${index + 1} · ${entry.title || '未命名'}（${entry.type || 'note'}）\n${String(
+          entry.content || ''
+        ).slice(0, 1600)}`
+    )
     .join('\n\n');
 }
 
@@ -380,7 +418,14 @@ ${chunk.text}`
 /**
  * 构建系统提示词。模组上下文只包含检索到的已解锁片段。
  */
-export function buildKpSystemPrompt({ module, state, characters, retrievedChunks, settings }) {
+export function buildKpSystemPrompt({
+  module,
+  state,
+  characters,
+  retrievedChunks,
+  worldbookEntries = [],
+  settings,
+}) {
   const chapters = module?.structure?.chapters || [];
   const currentScene = findScene(module, state?.currentSceneId);
   const currentChapterIndex = chapters.findIndex((chapter) => chapter.id === state?.currentChapterId);
@@ -434,6 +479,10 @@ ${formatCharacters(characters)}
 【本回合检索到的已解锁模组原文】
 ${formatChunks(retrievedChunks)}
 
+【世界书 / 历次跑团记录】
+${formatWorldbook(worldbookEntries)}
+（世界书是过去发生过的事实与角色记忆，可作为连续性参考，但不能替代本模组原文，也不能用于提前泄露本模组未解锁内容。）
+
 【输出协议】
 ${KP_OUTPUT_PROTOCOL}
 
@@ -470,6 +519,7 @@ export function buildKpContext({
   characters,
   history = [],
   userInput = '',
+  worldbook = [],
   settings = {},
 }) {
   if (!module) throw new Error('尚未导入模组，无法组装 KP 上下文。');
@@ -492,6 +542,12 @@ export function buildKpContext({
     currentSceneId: normalizedState.currentSceneId,
     allowedChapterIds,
   });
+  const worldbookEntries = selectWorldbookEntries(
+    worldbook,
+    `${query}\n${(characters || []).map((character) => character.name).join(' ')}`,
+    characters,
+    5
+  );
 
   const historyMessages = [];
   for (const message of history) {
@@ -515,6 +571,7 @@ export function buildKpContext({
     state: normalizedState,
     characters,
     retrievedChunks,
+    worldbookEntries,
     settings,
   });
 
@@ -530,6 +587,7 @@ export function buildKpContext({
     messages,
     systemPrompt,
     retrievedChunks,
+    worldbookEntries,
     state: normalizedState,
     query,
   };

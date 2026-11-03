@@ -16,7 +16,7 @@ export const SCHEMA_VERSION = 1;
 
 const LS_PREFIX = 'cthulhu-table';
 const DB_NAME = 'cthulhu-table';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const MEMORY_FALLBACK = new Map();
 
 export const STORAGE_KEYS = Object.freeze({
@@ -31,6 +31,7 @@ export const DB_STORES = Object.freeze({
   modules: 'modules',
   chats: 'chats',
   saves: 'saves',
+  worldbook: 'worldbook',
   apiLogs: 'apiLogs',
   meta: 'meta',
 });
@@ -491,6 +492,26 @@ export function normalizeCharacter(input) {
   character.occupationPoints = Math.round(toSafeNumber(character.occupationPoints, 0));
   character.interestPoints = Math.round(toSafeNumber(character.interestPoints, 0));
   character.notes = String(character.notes || '');
+  // 角色扮演用的长篇详细设定；不设前端 maxlength，支持一万字以上。
+  character.detailedSetting = String(character.detailedSetting || '');
+  character.memories = Array.isArray(character.memories)
+    ? character.memories
+        .filter(isPlainObject)
+        .map((memory) => ({
+          id: String(memory.id || createId('mem')),
+          campaignId: String(memory.campaignId || ''),
+          moduleId: String(memory.moduleId || ''),
+          moduleTitle: String(memory.moduleTitle || ''),
+          summary: String(memory.summary || ''),
+          keyEvents: Array.isArray(memory.keyEvents) ? memory.keyEvents.map(String).slice(0, 20) : [],
+          relationships: Array.isArray(memory.relationships)
+            ? memory.relationships.map(String).slice(0, 20)
+            : [],
+          unresolved: Array.isArray(memory.unresolved) ? memory.unresolved.map(String).slice(0, 20) : [],
+          createdAt: normalizeDate(memory.createdAt),
+        }))
+        .slice(0, 100)
+    : [];
   character.portrait = character.portrait || null;
   character.createdAt = normalizeDate(character.createdAt, timestamp);
   character.updatedAt = normalizeDate(character.updatedAt, timestamp);
@@ -742,6 +763,12 @@ export function openDatabase() {
         store.createIndex('campaignId', 'campaignId', { unique: false });
         store.createIndex('createdAt', 'createdAt', { unique: false });
       }
+      if (!db.objectStoreNames.contains(DB_STORES.worldbook)) {
+        const store = db.createObjectStore(DB_STORES.worldbook, { keyPath: 'id' });
+        store.createIndex('campaignId', 'campaignId', { unique: false });
+        store.createIndex('type', 'type', { unique: false });
+        store.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
       if (!db.objectStoreNames.contains(DB_STORES.apiLogs)) {
         const store = db.createObjectStore(DB_STORES.apiLogs, { keyPath: 'id' });
         store.createIndex('createdAt', 'createdAt', { unique: false });
@@ -931,6 +958,103 @@ export async function deleteChat(id) {
 }
 
 /* =========================================================
+ * 世界书 / 跑团日志（IndexedDB）
+ * ========================================================= */
+
+export function normalizeWorldbookEntry(input = {}) {
+  const source = isPlainObject(input) ? clone(input) : {};
+  const timestamp = nowIso();
+  return {
+    id: typeof source.id === 'string' && source.id ? source.id : createId('wb'),
+    campaignId: String(source.campaignId || ''),
+    moduleId: String(source.moduleId || ''),
+    moduleTitle: String(source.moduleTitle || ''),
+    type: ['log', 'memory', 'npc', 'location', 'clue', 'event', 'note'].includes(source.type)
+      ? source.type
+      : 'note',
+    title: String(source.title || '未命名世界书条目').slice(0, 300),
+    content: String(source.content || '').slice(0, 50000),
+    tags: Array.isArray(source.tags) ? source.tags.map(String).slice(0, 30) : [],
+    characterIds: Array.isArray(source.characterIds)
+      ? source.characterIds.map(String).slice(0, 20)
+      : [],
+    sceneId: String(source.sceneId || ''),
+    source: ['turn', 'campaign', 'manual', 'memory'].includes(source.source)
+      ? source.source
+      : 'manual',
+    importance: Math.max(0, Math.min(5, Math.round(toSafeNumber(source.importance, 1)))),
+    includeInContext: source.includeInContext !== false,
+    createdAt: normalizeDate(source.createdAt, timestamp),
+    updatedAt: normalizeDate(source.updatedAt, timestamp),
+  };
+}
+
+export async function listWorldbookEntries({
+  campaignId = '',
+  characterId = '',
+  type = '',
+  limit = 0,
+} = {}) {
+  let list = await dbGetAll(DB_STORES.worldbook);
+  list = (list || []).map(normalizeWorldbookEntry);
+  if (campaignId) list = list.filter((entry) => entry.campaignId === campaignId);
+  if (characterId) {
+    list = list.filter((entry) => (entry.characterIds || []).includes(characterId));
+  }
+  if (type) list = list.filter((entry) => entry.type === type);
+  list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  if (limit > 0) list = list.slice(0, limit);
+  return list;
+}
+
+export function getWorldbookEntry(id) {
+  return dbGet(DB_STORES.worldbook, id);
+}
+
+export async function saveWorldbookEntry(input) {
+  if (!isPlainObject(input) || !String(input.title || '').trim()) {
+    throw new StorageError('世界书条目必须包含标题。', { code: 'INVALID_WORLDBOOK_ENTRY' });
+  }
+  const existing = input.id ? await getWorldbookEntry(input.id) : null;
+  const entry = normalizeWorldbookEntry({
+    ...input,
+    id: existing?.id || input.id || createId('wb'),
+    createdAt: existing?.createdAt || input.createdAt,
+    updatedAt: nowIso(),
+  });
+  await dbPut(DB_STORES.worldbook, entry);
+  emit('cthulhu:worldbook-changed', { id: entry.id });
+  return entry;
+}
+
+export async function deleteWorldbookEntry(id) {
+  await dbDelete(DB_STORES.worldbook, id);
+  emit('cthulhu:worldbook-changed', { id });
+  return true;
+}
+
+/**
+ * 加载 KP 可用的世界书：当前战役全部 + 角色跨模组记忆。
+ * 去重后按时间倒序，避免上一场模组的记忆在下一场丢失。
+ */
+export async function getWorldbookForContext(campaignId, characterIds = []) {
+  const all = (await dbGetAll(DB_STORES.worldbook)).map(normalizeWorldbookEntry);
+  const ids = new Set(characterIds);
+  const selected = all.filter(
+    (entry) =>
+      entry.includeInContext !== false &&
+      (entry.campaignId === campaignId ||
+        (entry.type === 'memory' &&
+          (!ids.size || (entry.characterIds || []).some((id) => ids.has(id)))) ||
+        (entry.characterIds || []).some((id) => ids.has(id)))
+  );
+  const unique = new Map(selected.map((entry) => [entry.id, entry]));
+  return [...unique.values()]
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, 120);
+}
+
+/* =========================================================
  * 存档与 API 日志（IndexedDB）
  * ========================================================= */
 
@@ -1002,6 +1126,7 @@ export async function getStorageStats() {
     modules: 0,
     chats: 0,
     saves: 0,
+    worldbook: 0,
     apiLogs: 0,
     usage: 0,
     quota: 0,
@@ -1016,6 +1141,7 @@ export async function getStorageStats() {
           dbCount(DB_STORES.modules),
           dbCount(DB_STORES.chats),
           dbCount(DB_STORES.saves),
+          dbCount(DB_STORES.worldbook),
           dbCount(DB_STORES.apiLogs),
         ]);
       })(),
@@ -1023,10 +1149,11 @@ export async function getStorageStats() {
       'IndexedDB 响应超时。可能是浏览器隐私策略或存储被其他标签页占用。'
     );
     stats.indexedDbAvailable = true;
-    const [modules, chats, saves, logs] = counts;
+    const [modules, chats, saves, worldbook, logs] = counts;
     stats.modules = modules || 0;
     stats.chats = chats || 0;
     stats.saves = saves || 0;
+    stats.worldbook = worldbook || 0;
     stats.apiLogs = logs || 0;
   } catch (error) {
     console.warn('[Cthulhu Table] IndexedDB 统计失败：', error);
@@ -1097,10 +1224,11 @@ export async function runStorageSelfTest() {
 }
 
 export async function exportBackup() {
-  const [modules, chats, saves] = await Promise.all([
+  const [modules, chats, saves, worldbook] = await Promise.all([
     listModules().catch(() => []),
     listChats().catch(() => []),
     listSaves().catch(() => []),
+    listWorldbookEntries().catch(() => []),
   ]);
   return {
     format: 'cthulhu-table.backup',
@@ -1114,6 +1242,7 @@ export async function exportBackup() {
     modules,
     chats,
     saves,
+    worldbook,
   };
 }
 
@@ -1121,10 +1250,11 @@ export async function exportBackup() {
 export async function exportCampaignBundle(campaignId) {
   const campaign = getCampaign(campaignId);
   if (!campaign) throw new StorageError('找不到要导出的战役。', { code: 'CAMPAIGN_NOT_FOUND' });
-  const [module, chats, saves] = await Promise.all([
+  const [module, chats, saves, worldbook] = await Promise.all([
     campaign.moduleId ? getModule(campaign.moduleId).catch(() => null) : null,
     listChats(campaign.id).catch(() => []),
     listSaves(campaign.id).catch(() => []),
+    listWorldbookEntries({ campaignId: campaign.id }).catch(() => []),
   ]);
   const characters = campaign.playerCharacterIds
     .map((id) => getCharacter(id))
@@ -1138,6 +1268,7 @@ export async function exportCampaignBundle(campaignId) {
     characters,
     chats,
     saves,
+    worldbook,
   };
 }
 
@@ -1186,6 +1317,7 @@ export async function importBackup(payload) {
       dbClear(DB_STORES.modules),
       dbClear(DB_STORES.chats),
       dbClear(DB_STORES.saves),
+      dbClear(DB_STORES.worldbook),
       dbClear(DB_STORES.apiLogs),
     ]);
     for (const raw of Array.isArray(data.modules) ? data.modules : []) {
@@ -1209,6 +1341,11 @@ export async function importBackup(payload) {
         ...clone(raw),
         id: raw.id || createId('save'),
       });
+    }
+    for (const raw of Array.isArray(data.worldbook) ? data.worldbook : []) {
+      if (!raw || typeof raw !== 'object') continue;
+      const entry = normalizeWorldbookEntry({ ...raw, id: raw.id || createId('wb') });
+      await dbPut(DB_STORES.worldbook, entry);
     }
   } catch (error) {
     console.warn('[Cthulhu Table] 备份中的 IndexedDB 数据导入失败：', error);
@@ -1236,6 +1373,7 @@ export async function importBackup(payload) {
     modules: (data.modules || []).length,
     chats: (data.chats || []).length,
     saves: (data.saves || []).length,
+    worldbook: (data.worldbook || []).length,
   };
 }
 
@@ -1313,6 +1451,13 @@ export const storage = Object.freeze({
     get: getSave,
     save: saveSave,
     remove: deleteSave,
+  },
+  worldbook: {
+    list: listWorldbookEntries,
+    get: getWorldbookEntry,
+    save: saveWorldbookEntry,
+    remove: deleteWorldbookEntry,
+    forContext: getWorldbookForContext,
   },
   logs: {
     add: addApiLog,

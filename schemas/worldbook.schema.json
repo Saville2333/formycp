@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cthulhu-table.local/schemas/worldbook.schema.json",
+  "title": "Cthulhu Table World Book Entry",
+  "type": "object",
+  "required": ["id", "type", "title", "content", "createdAt", "updatedAt"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^wb_[A-Za-z0-9_-]{4,80}$" },
+    "campaignId": { "type": "string", "maxLength": 80 },
+    "moduleId": { "type": "string", "maxLength": 80 },
+    "moduleTitle": { "type": "string", "maxLength": 300 },
+    "type": { "enum": ["log", "memory", "npc", "location", "clue", "event", "note"] },
+    "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+    "content": { "type": "string", "maxLength": 50000 },
+    "tags": {
+      "type": "array",
+      "maxItems": 30,
+      "items": { "type": "string", "maxLength": 80 }
+    },
+    "characterIds": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string", "maxLength": 80 }
+    },
+    "sceneId": { "type": "string", "maxLength": 80 },
+    "source": { "enum": ["turn", "campaign", "manual", "memory"] },
+    "importance": { "type": "integer", "minimum": 0, "maximum": 5 },
+    "includeInContext": { "type": "boolean" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

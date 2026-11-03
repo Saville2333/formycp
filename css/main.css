@@ -4557,6 +4557,207 @@ svg {
   font-size: 7.5px;
 }
 
+/* ---------- 角色记忆 / 世界书 ---------- */
+
+.memory-list {
+  display: grid;
+  gap: 8px;
+}
+
+.memory-item {
+  padding: 10px 12px;
+  border: 1px solid rgba(184, 154, 93, 0.12);
+  background: rgba(13, 28, 20, 0.45);
+}
+
+.memory-item__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.memory-item__head strong {
+  color: var(--gold-bright);
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.memory-item__summary {
+  margin: 0;
+  color: #a9ad9e;
+  font-size: 9.5px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.memory-item__events {
+  margin: 5px 0 0;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  line-height: 1.7;
+}
+
+.sheet-longtext {
+  border: 1px solid var(--line);
+  background: rgba(10, 22, 16, 0.45);
+}
+
+.sheet-longtext summary {
+  padding: 9px 12px;
+  color: var(--gold-dim);
+  font-size: 9.5px;
+  cursor: pointer;
+}
+
+.sheet-longtext pre {
+  max-height: 360px;
+  margin: 0;
+  padding: 10px 14px 14px;
+  overflow: auto;
+  color: #a9ad9e;
+  font-family: var(--font-display);
+  font-size: 11px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+}
+
+.composer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.worldbook-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 22px;
+  margin-bottom: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  background: rgba(12, 26, 19, 0.5);
+}
+
+.worldbook-toolbar .form-field {
+  flex: 1;
+  max-width: 520px;
+}
+
+.worldbook-stats {
+  display: flex;
+  gap: 16px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+}
+
+.worldbook-stats strong {
+  color: var(--gold);
+  font-weight: 500;
+}
+
+.worldbook-section {
+  margin-top: 26px;
+}
+
+.worldbook-list {
+  display: grid;
+  gap: 9px;
+}
+
+.worldbook-card {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, rgba(17, 36, 27, 0.55), rgba(9, 20, 15, 0.6));
+}
+
+.worldbook-card[hidden] {
+  display: none !important;
+}
+
+.worldbook-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.worldbook-type {
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.08em;
+}
+
+.worldbook-type--memory {
+  border-color: rgba(185, 154, 91, 0.38);
+  color: var(--gold);
+}
+
+.worldbook-type--log {
+  border-color: rgba(94, 139, 110, 0.4);
+  color: #8eb79b;
+}
+
+.worldbook-card__title {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+}
+
+.worldbook-card__head .panel__meta {
+  margin-left: auto;
+}
+
+.worldbook-card__content {
+  display: -webkit-box;
+  margin: 0 0 9px;
+  overflow: hidden;
+  color: #9da293;
+  font-size: 9.5px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.worldbook-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 7px;
+}
+
+.worldbook-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.worldbook-card__actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.empty-hint {
+  margin: 8px 0;
+  color: var(--faint);
+  font-size: 9px;
+  font-style: italic;
+}
+
 /* ---------- 响应式补充 ---------- */
 
 @media (max-width: 1320px) {
@@ -4624,6 +4825,31 @@ svg {
 }
 
 @media (max-width: 760px) {
+  .worldbook-toolbar {
+    display: block;
+  }
+
+  .worldbook-toolbar .form-field {
+    max-width: none;
+  }
+
+  .worldbook-stats {
+    margin-top: 10px;
+  }
+
+  .composer__bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .composer__actions {
+    width: 100%;
+  }
+
+  .composer__actions .btn {
+    flex: 1;
+  }
+
   .form-grid,
   .form-grid--compact {
     grid-template-columns: minmax(0, 1fr);

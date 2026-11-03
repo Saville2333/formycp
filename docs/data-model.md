@@ -26,12 +26,15 @@ Character
 ├── 外貌：appearance / heightCm / weightKg / personality[] / catchphrase
 ├── 人设：background / joinReason / importantPerson / ideology
 │         significantPlace / treasuredItem / traits / phobias
+├── 角色扮演：detailedSetting（支持一万字以上）
 ├── 语言与物品：motherTongue / languages[] / possessions[]
 ├── 属性：attributes { str, con, siz, dex, app, int, pow, edu }
 ├── 幸运：luck
 ├── 衍生：derived { hp{current,max}, mp{...}, san{...}, mov, db, build }
 ├── 技能：skills[{ name, base, occupation, interest, total, checked }]
 ├── 车卡：occupationId / creditRating / occupationPoints / interestPoints / pointsSpent
+├── 跨模组记忆：memories[] { campaignId, moduleId, moduleTitle, summary,
+│                           keyEvents[], relationships[], unresolved[], createdAt }
 └── 元数据：npcDetails? / notes / portrait / createdAt / updatedAt
 ```
 
@@ -158,7 +161,30 @@ Chat
 
 骰子卡片以 `role: "dice"` 存为独立消息，保证之后还能作为上下文传给 KP。暗骰用 `meta.hidden = true` 标记，只在 KP 视图中展示。
 
-## 6. 设置 `settings.schema.json`
+## 6. 世界书 `worldbook.schema.json`
+
+完整 Schema：[`../schemas/worldbook.schema.json`](../schemas/worldbook.schema.json)
+
+```text
+WorldbookEntry
+├── campaignId / moduleId / moduleTitle / sceneId
+├── type: log|memory|npc|location|clue|event|note
+├── title / content
+├── tags[] / characterIds[]
+├── source: turn|campaign|manual|memory
+├── importance: 0–5
+├── includeInContext
+└── createdAt / updatedAt
+```
+
+写入规则：
+
+1. 每个 KP 回合结束写入 `type: "log"`，内容为玩家行动 + 骰子 + KP 叙事。
+2. 模组完结时为每位调查员写入 `type: "memory"`，同时追加到 `Character.memories`。
+3. KP 上下文按当前场景/输入关键词 + 角色 id 检索世界书，最多注入 5 条。
+4. 世界书不替代模组原文，不允许用未来记录提前泄露本模组未解锁内容。
+
+## 7. 设置 `settings.schema.json`
 
 完整 Schema：[`../schemas/settings.schema.json`](../schemas/settings.schema.json)
 
@@ -186,7 +212,7 @@ Settings
 
 `/models` 的检测结果不写入 Settings；前端在 `model-catalog.js` 中按提供商分组，并用参考价格目录（USD / 1M tokens）在组内升序展示。价格可能过时，只作为模型选择参考。
 
-## 7. localStorage 键位
+## 8. localStorage 键位
 
 | 键 | 内容 |
 | --- | --- |
@@ -196,19 +222,20 @@ Settings
 | `cthulhu-table:active-campaign:v1` | 当前战役 id |
 | `cthulhu-table:ui:v1` | 预留：滚动位置、折叠状态等纯界面偏好 |
 
-## 8. IndexedDB 对象仓库
+## 9. IndexedDB 对象仓库
 
-数据库：`cthulhu-table` · 版本 `1`
+数据库：`cthulhu-table` · 版本 `2`（v2 新增 `worldbook` 仓库）
 
 | store | keyPath | 索引 | 内容 |
 | --- | --- | --- | --- |
 | `modules` | `id` | `updatedAt` | 模组全文、结构树、分块、线索、事件 |
 | `chats` | `id` | `campaignId`, `updatedAt` | 聊天记录 |
 | `saves` | `id` | `campaignId`, `createdAt` | 战役快照 |
+| `worldbook` | `id` | `campaignId`, `type`, `updatedAt` | 跑团日志、角色记忆、NPC/地点/线索/笔记 |
 | `apiLogs` | `id` | `createdAt` | 请求耗时、Token、错误摘要 |
 | `meta` | `key` | — | 数据库版本、自检探针、迁移标记 |
 
-## 9. 导出格式
+## 10. 导出格式
 
 角色 JSON：
 
@@ -235,10 +262,11 @@ Settings
   "activeCampaignId": "",
   "modules": [],
   "chats": [],
-  "saves": []
+  "saves": [],
+  "worldbook": []
 }
 ```
 
-单战役导出格式为 `cthulhu-table.campaign`，包含 `campaign`、`module`、`characters`、`chats` 与 `saves`。
+单战役导出格式为 `cthulhu-table.campaign`，包含 `campaign`、`module`、`characters`、`chats`、`saves` 与 `worldbook`。
 
 > 完整备份包含 API 配置和密钥。导入备份会覆盖当前浏览器数据，UI 会二次确认。

@@ -402,6 +402,14 @@ function renderBuilder() {
           </div>
           <div class="form-grid">
             ${textArea({ label: '背景故事', key: 'background', rows: 6, wide: true })}
+            ${textArea({
+              label: '详细角色设定（角色扮演用，支持一万字以上）',
+              key: 'detailedSetting',
+              rows: 18,
+              wide: true,
+              placeholder:
+                '可写入完整成长经历、价值观、说话方式、人际关系、秘密、习惯、对超自然的态度、角色目标等。此字段不设前端字数上限，会用于 AI 代演与守秘人上下文。',
+            })}
             ${textArea({ label: '加入调查的原因', key: 'joinReason', rows: 3, wide: true })}
             ${textArea({ label: '重要之人', key: 'importantPerson', rows: 2 })}
             ${textArea({ label: '信念 / 理念', key: 'ideology', rows: 2 })}
@@ -429,6 +437,39 @@ function renderBuilder() {
             })}
             ${textArea({ label: '备注', key: 'notes', rows: 3, wide: true })}
           </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head">
+            <h2 class="panel__title">${icon('scroll')} 角色记忆</h2>
+            <span class="panel__meta">${(draft.memories || []).length} MEMORIES</span>
+          </div>
+          ${
+            draft.memories?.length
+              ? `<div class="memory-list">${draft.memories
+                  .map(
+                    (memory) => `<article class="memory-item">
+                      <div class="memory-item__head">
+                        <strong>${escapeHTML(memory.moduleTitle || '未命名模组')}</strong>
+                        <span class="panel__meta">${escapeHTML(
+                          new Date(memory.createdAt).toLocaleDateString('zh-CN')
+                        )}</span>
+                      </div>
+                      <p class="memory-item__summary">${escapeHTML(memory.summary)}</p>
+                      ${
+                        memory.keyEvents?.length
+                          ? `<p class="memory-item__events">${memory.keyEvents
+                              .map((event) => escapeHTML(event))
+                              .join(' · ')}</p>`
+                          : ''
+                      }
+                    </article>`
+                  )
+                  .join('')}</div>`
+              : `<div class="info-strip">${icon(
+                  'spark'
+                )}<span>完成一个模组后，可以在跑团桌面点击「完结战役并总结记忆」；总结会写入角色卡，并自动带入下一次调查。</span></div>`
+          }
         </section>
 
         <section class="panel">
@@ -655,6 +696,42 @@ export function showCharacterSheet(id) {
         ${bioBlock('特质 / 缺陷', character.traits, { wide: true })}
         ${bioBlock('恐惧症 / 狂躁症', character.phobias, { wide: true })}
       </div>
+    </section>
+    <section class="sheet-section">
+      <h4 class="sheet-section__title">详细角色设定</h4>
+      ${
+        character.detailedSetting
+          ? `<details class="sheet-longtext"><summary>展开 ${character.detailedSetting.length} 字角色设定</summary><pre>${escapeHTML(
+              character.detailedSetting
+            )}</pre></details>`
+          : '<p class="modal-copy muted">尚未填写详细角色设定。</p>'
+      }
+    </section>
+    <section class="sheet-section">
+      <h4 class="sheet-section__title">角色记忆</h4>
+      ${
+        character.memories?.length
+          ? `<div class="memory-list">${character.memories
+              .map(
+                (memory) => `<article class="memory-item">
+                  <div class="memory-item__head"><strong>${escapeHTML(
+                    memory.moduleTitle || '未命名模组'
+                  )}</strong><span class="panel__meta">${escapeHTML(
+                    new Date(memory.createdAt).toLocaleDateString('zh-CN')
+                  )}</span></div>
+                  <p class="memory-item__summary">${escapeHTML(memory.summary)}</p>
+                  ${
+                    memory.keyEvents?.length
+                      ? `<p class="memory-item__events">${memory.keyEvents
+                          .map((event) => escapeHTML(event))
+                          .join(' · ')}</p>`
+                      : ''
+                  }
+                </article>`
+              )
+              .join('')}</div>`
+          : '<p class="modal-copy muted">尚未获得跨模组记忆。</p>'
+      }
     </section>
     <section class="sheet-section">
       <h4 class="sheet-section__title">属性与衍生值</h4>

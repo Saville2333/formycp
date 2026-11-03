@@ -9,6 +9,7 @@ import { homeView } from './views/home-view.js';
 import { characterView } from './views/character-view.js';
 import { moduleView } from './views/module-view.js';
 import { tableView } from './views/table-view.js';
+import { worldbookView } from './views/worldbook-view.js';
 import { settingsView } from './views/settings-view.js';
 import { escapeHTML, icon, toast } from './ui.js';
 
@@ -43,6 +44,7 @@ const ROUTES = {
   },
   '/modules': { title: '模组档案', view: moduleView },
   '/table': { title: '跑团桌面', view: tableView },
+  '/worldbook': { title: '世界书', view: worldbookView },
   '/settings': { title: '设置与接口', view: settingsView },
 };
 
@@ -50,6 +52,7 @@ const ACTION_HANDLERS = Object.freeze({
   ...characterView.actions,
   ...moduleView.actions,
   ...tableView.actions,
+  ...worldbookView.actions,
   ...settingsView.actions,
 });
 

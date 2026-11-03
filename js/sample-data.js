@@ -89,6 +89,8 @@ export function createSampleCharacters() {
       occupationPoints: 160,
       interestPoints: 140,
       pointsSpent: { occupation: 160, interest: 140 },
+      detailedSetting:
+        '林若岚习惯把录音机放在外套内袋，采访前会先数一遍胶卷。她不怕鬼故事，只怕自己写不出真相；遇到强势的人会先示弱，再在细节里找破绽。她相信证据，但在亲眼见过无法解释的事后，开始随身带一枚祖母留下的旧银币。',
       notes: '示例角色 · 可进入车卡工坊直接修改。',
       portrait: null,
       createdAt: stamp,
@@ -166,6 +168,8 @@ export function createSampleCharacters() {
       occupationPoints: 170,
       interestPoints: 150,
       pointsSpent: { occupation: 170, interest: 150 },
+      detailedSetting:
+        '周砚表面是个沉默的旧书商，实际上对地方志、失踪人口和葬礼习俗有近乎偏执的记忆力。他说话慢，习惯先引用一段旧报纸再给出结论；对朋友极重承诺，对欺骗过他的人会记很久。他随身携带一本没有封面的笔记，里面夹着父亲失踪那年的剪报。',
       notes: '示例角色 · 可进入车卡工坊直接修改。',
       portrait: null,
       createdAt: stamp,

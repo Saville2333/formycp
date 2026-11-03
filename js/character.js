@@ -416,6 +416,8 @@ export function createDraft({
     interestPoints: finalAttributes.int * 2,
     pointsSpent: { occupation: 0, interest: 0 },
     notes: '',
+    detailedSetting: '',
+    memories: [],
     portrait: null,
   };
 }
@@ -691,6 +693,25 @@ ${skills.map((skill) => `| ${skill.name} | ${skill.base} | ${skill.occupation} |
 - **其他语言**：${markdownValue(languages)}
 - **随身物品**：${markdownValue(character.possessions)}
 
+## 详细角色设定
+
+${markdownValue(character.detailedSetting)}
+
+## 角色记忆
+
+${
+  character.memories?.length
+    ? character.memories
+        .map(
+          (memory) =>
+            `### ${memory.moduleTitle || '未命名模组'}\n\n${memory.summary}${
+              memory.keyEvents?.length ? `\n\n关键事件：${memory.keyEvents.join('；')}` : ''
+            }`
+        )
+        .join('\n\n')
+    : '暂无跨模组记忆。'
+}
+
 ## 备注
 
 ${markdownValue(character.notes)}
@@ -742,6 +763,7 @@ function personaText(persona) {
     personality: '性格关键词',
     catchphrase: '口头禅',
     background: '背景故事',
+    detailedSetting: '详细角色设定',
     joinReason: '加入调查的原因',
     importantPerson: '重要之人',
     ideology: '信念 / 理念',

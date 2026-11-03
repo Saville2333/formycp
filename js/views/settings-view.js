@@ -987,7 +987,7 @@ async function refreshStorageStatus() {
     setText('[data-storage-idb-value]', stats.indexedDbAvailable ? '可用' : '不可用');
     setText(
       '[data-storage-counts]',
-      `${stats.characters} 角色 · ${stats.campaigns || 0} 战役 · ${stats.modules} 模组 · ${stats.chats} 对话 · ${stats.saves} 存档`
+      `${stats.characters} 角色 · ${stats.campaigns || 0} 战役 · ${stats.modules} 模组 · ${stats.chats} 对话 · ${stats.saves} 存档 · ${stats.worldbook || 0} 世界书`
     );
     setText(
       '[data-storage-quota]',

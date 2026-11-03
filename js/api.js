@@ -117,7 +117,11 @@ export function buildHeaders(profile, { useWebSearch = false } = {}) {
   return headers;
 }
 
-export function buildRequestBody(profile, messages, { stream = true, useWebSearch = false } = {}) {
+export function buildRequestBody(
+  profile,
+  messages,
+  { stream = true, useWebSearch = false, maxTokens = null } = {}
+) {
   if (!profile || typeof profile !== 'object') {
     throw new ApiError('接口配置不存在。', { code: 'MISSING_PROFILE' });
   }
@@ -132,7 +136,10 @@ export function buildRequestBody(profile, messages, { stream = true, useWebSearc
     model: profile.model,
     messages,
     temperature: Number(profile.temperature ?? API_DEFAULTS.temperature),
-    max_tokens: Math.max(1, Math.floor(Number(profile.maxTokens) || API_DEFAULTS.maxTokens)),
+    max_tokens: Math.max(
+      1,
+      Math.floor(Number(maxTokens) || Number(profile.maxTokens) || API_DEFAULTS.maxTokens)
+    ),
     top_p: Number(profile.topP ?? API_DEFAULTS.topP),
     stream,
   };
@@ -431,12 +438,18 @@ function extractNonStreamContent(payload) {
 export async function complete(
   profile,
   messages,
-  { signal, timeoutMs = API_DEFAULTS.requestTimeoutMs, retries = 2, useWebSearch = true } = {}
+  {
+    signal,
+    timeoutMs = API_DEFAULTS.requestTimeoutMs,
+    retries = 2,
+    useWebSearch = true,
+    maxTokens = null,
+  } = {}
 ) {
   const startedAt = performance.now();
   const url = endpointForProfile(profile);
   const headers = buildHeaders(profile, { useWebSearch });
-  const body = buildRequestBody(profile, messages, { stream: false, useWebSearch });
+  const body = buildRequestBody(profile, messages, { stream: false, useWebSearch, maxTokens });
   let response;
   try {
     response = await requestWithRetry(

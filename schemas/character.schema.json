@@ -42,6 +42,11 @@
     },
     "catchphrase": { "type": "string", "maxLength": 200 },
     "background": { "type": "string", "maxLength": 12000 },
+    "detailedSetting": {
+      "type": "string",
+      "maxLength": 100000,
+      "description": "角色扮演用的长篇详细设定，支持一万字以上。"
+    },
     "joinReason": { "type": "string", "maxLength": 4000 },
     "importantPerson": { "type": "string", "maxLength": 2000 },
     "ideology": { "type": "string", "maxLength": 2000 },
@@ -131,6 +136,26 @@
       "additionalProperties": false
     },
     "notes": { "type": "string", "maxLength": 12000 },
+    "memories": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "required": ["id", "summary"],
+        "properties": {
+          "id": { "type": "string", "maxLength": 80 },
+          "campaignId": { "type": "string", "maxLength": 80 },
+          "moduleId": { "type": "string", "maxLength": 80 },
+          "moduleTitle": { "type": "string", "maxLength": 300 },
+          "summary": { "type": "string", "maxLength": 4000 },
+          "keyEvents": { "type": "array", "items": { "type": "string", "maxLength": 500 } },
+          "relationships": { "type": "array", "items": { "type": "string", "maxLength": 500 } },
+          "unresolved": { "type": "array", "items": { "type": "string", "maxLength": 500 } },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    },
     "portrait": {
       "oneOf": [
         { "type": "string" },
