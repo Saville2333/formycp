@@ -17,6 +17,7 @@ import {
 } from '../module.js';
 import { createInitialKpState } from '../kp.js';
 import { auditModuleWithAI } from '../module-audit.js';
+import { editModuleWithAI, MAX_EDIT_CHARS } from '../module-editor.js';
 import {
   escapeHTML,
   icon,
@@ -104,6 +105,279 @@ function moduleAuditMarkup(module) {
       ).toLocaleString('zh-CN')}`
     )}${audit.truncated ? ' · 正文过长，仅检测了前一部分' : ''}</p>
   </div>`;
+}
+
+function openModuleStudio({ text, fileName = '', title = '' }, ctx) {
+  let originalText = text;
+  let currentText = text;
+  let parsed = null;
+  let undoStack = [];
+  let dirty = false;
+  let saved = false;
+  try {
+    parsed = parseModuleFile({ text: currentText, fileName, title });
+  } catch (error) {
+    toast(error.message, { type: 'error', duration: 7000 });
+    return;
+  }
+  const initialTitle = String(title || parsed.title || '');
+  const body = document.createElement('div');
+  body.className = 'module-studio';
+  body.innerHTML = `<div class="module-studio__bar">
+    <label class="form-field module-studio__title"><span class="form-field__label">模组标题</span><input class="form-input" id="studio-title" value="${escapeHTML(
+      initialTitle
+    )}"></label>
+    <div class="module-studio__stats" id="studio-stats"></div>
+    <div class="module-studio__actions">
+      <button class="btn btn--ghost btn--sm" type="button" data-studio-undo disabled>撤销 AI</button>
+      <button class="btn btn--ghost btn--sm" type="button" data-studio-reparse>重新解析</button>
+      <button class="btn btn--ghost btn--sm" type="button" data-studio-restore>恢复原文</button>
+    </div>
+  </div>
+  <div class="module-studio__grid">
+    <section class="module-studio__pane module-studio__pane--source">
+      <div class="module-studio__pane-head">
+        <span>${icon('book')} 模组原文 · 可阅读 / 直接编辑</span>
+        <span class="module-studio__count" id="studio-count">${currentText.length} 字</span>
+      </div>
+      <textarea class="module-studio__source" id="studio-source" spellcheck="false" aria-label="模组原文">${escapeHTML(
+        currentText
+      )}</textarea>
+      <p class="module-studio__hint">左侧是完整原文；可直接修改，或让右侧 KP 按你的要求改。AI 修改会重新解析章节、场景、线索、HO 与检索索引。</p>
+    </section>
+    <aside class="module-studio__pane module-studio__pane--chat">
+      <div class="module-studio__pane-head">
+        <span>${icon('spark')} 与 AI KP 对话校订</span>
+        <span class="panel__meta">MAX ${MAX_EDIT_CHARS} 字</span>
+      </div>
+      <div class="module-studio__chat" id="studio-chat">
+        <div class="studio-chat__note">${icon(
+          'spark'
+        )}<p>告诉 KP 要改什么。例如：“把场景二拆成两个场景”“给 HO1 补一段秘密”“把所有‘调查员’改成‘访客’”“把结局写得更克制”。</p></div>
+      </div>
+      <div class="module-studio__composer">
+        <textarea class="form-input form-textarea" id="studio-request" rows="4" placeholder="描述你想怎么改这份模组……"></textarea>
+        <div class="module-studio__composer-actions">
+          <span class="form-help">AI 只改左侧正文；保存前不会写入档案柜。</span>
+          <button class="btn btn--gold btn--sm" type="button" data-studio-ai>${icon(
+            'spark'
+          )} 发送给 KP</button>
+        </div>
+      </div>
+    </aside>
+  </div>`;
+  openModal({
+    eyebrow: 'Module Studio',
+    title: '阅读模组 · 与 KP 一起校订',
+    body,
+    footer: `<div class="module-studio__footer">
+      <span class="module-studio__footer-note">${icon(
+        'alert'
+      )} 保存前，档案柜和原始模组不会改变。</span>
+      <div class="modal-actions">
+        <button class="btn btn--ghost" type="button" data-studio-cancel>退回不保存</button>
+        <button class="btn btn--primary" type="button" data-studio-save>${icon(
+          'check'
+        )} 保存模组</button>
+      </div>
+    </div>`,
+    onMount: (dialog) => {
+      dialog.classList.add('modal--studio');
+      const source = dialog.querySelector('#studio-source');
+      const count = dialog.querySelector('#studio-count');
+      const statsElement = dialog.querySelector('#studio-stats');
+      const chat = dialog.querySelector('#studio-chat');
+      const requestInput = dialog.querySelector('#studio-request');
+      const aiButton = dialog.querySelector('[data-studio-ai]');
+      const undoButton = dialog.querySelector('[data-studio-undo]');
+      const titleInput = dialog.querySelector('#studio-title');
+
+      const updateStats = (nextParsed = parsed) => {
+        parsed = nextParsed;
+        const stats = moduleStats(parsed);
+        statsElement.innerHTML = `<span><strong>${stats.chapters}</strong> 章</span><span><strong>${
+          stats.scenes
+        }</strong> 场景</span><span><strong>${stats.clues}</strong> 线索</span><span><strong>${
+          stats.npcs
+        }</strong> NPC</span><span><strong>${stats.roles || 0}</strong> HO</span><span><strong>${
+          stats.chunks
+        }</strong> 分块</span>`;
+        count.textContent = `${currentText.length} 字`;
+        undoButton.disabled = !undoStack.length;
+      };
+
+      const syncText = (nextText, { pushUndo = false, markDirty = true } = {}) => {
+        const nextParsed = parseModuleFile({
+          text: nextText,
+          fileName,
+          title: titleInput.value.trim() || initialTitle,
+        });
+        if (pushUndo) undoStack.push(currentText);
+        currentText = nextText;
+        source.value = currentText;
+        if (markDirty) dirty = true;
+        updateStats(nextParsed);
+      };
+
+      const addChat = (role, content, extraClass = '') => {
+        const item = document.createElement('div');
+        item.className = `studio-chat__item studio-chat__item--${role} ${extraClass}`.trim();
+        item.innerHTML = `<span class="studio-chat__label">${
+          role === 'user' ? '你' : role === 'kp' ? 'KP' : '系统'
+        }</span><div class="studio-chat__bubble">${escapeHTML(content).replace(/\n/g, '<br>')}</div>`;
+        chat.appendChild(item);
+        chat.scrollTop = chat.scrollHeight;
+        return item;
+      };
+
+      const setBusy = (busy) => {
+        aiButton.disabled = busy;
+        aiButton.classList.toggle('is-busy', busy);
+        aiButton.innerHTML = busy
+          ? `${icon('spark')} KP 正在修订…`
+          : `${icon('spark')} 发送给 KP`;
+        requestInput.disabled = busy;
+      };
+
+      updateStats(parsed);
+      source.addEventListener('input', () => {
+        currentText = source.value;
+        dirty = true;
+        count.textContent = `${currentText.length} 字`;
+      });
+      titleInput?.addEventListener('input', () => {
+        dirty = true;
+      });
+
+      dialog.querySelector('[data-studio-reparse]')?.addEventListener('click', () => {
+        try {
+          syncText(source.value, { pushUndo: false });
+          toast('已重新解析结构与统计。', { type: 'success', duration: 2200 });
+        } catch (error) {
+          toast(error.message, { type: 'error', duration: 6000 });
+        }
+      });
+
+      dialog.querySelector('[data-studio-restore]')?.addEventListener('click', () => {
+        if (!originalText || currentText === originalText) return;
+        try {
+          undoStack.push(currentText);
+          syncText(originalText, { pushUndo: false });
+          toast('已恢复为导入时的原文。', { type: 'info' });
+        } catch (error) {
+          toast(error.message, { type: 'error' });
+        }
+      });
+
+      undoButton?.addEventListener('click', () => {
+        const previous = undoStack.pop();
+        if (previous === undefined) return;
+        try {
+          syncText(previous, { pushUndo: false });
+        } catch (error) {
+          toast(error.message, { type: 'error' });
+        }
+      });
+
+      const sendToKp = async () => {
+        const request = String(requestInput.value || '').trim();
+        if (!request) return toast('请先写下修改要求。', { type: 'warning' });
+        const profile = storage.settings.getActiveApiProfile();
+        if (!profile) {
+          return toast('尚未配置 AI 接口，无法与 KP 对话。', { type: 'error', duration: 6000 });
+        }
+        if (source.value.length > MAX_EDIT_CHARS) {
+          return toast(
+            `当前模组约 ${source.value.length} 字，超过单次 AI 校订上限 ${MAX_EDIT_CHARS} 字；请直接编辑左侧原文。`,
+            { type: 'error', duration: 7000 }
+          );
+        }
+        addChat('user', request);
+        requestInput.value = '';
+        setBusy(true);
+        const progress = addChat('system', 'KP 正在阅读全文并准备修订，长模组可能需要一会儿……');
+        try {
+          const result = await editModuleWithAI({
+            profile,
+            text: source.value,
+            title: titleInput.value.trim() || initialTitle,
+            request,
+          });
+          const nextParsed = parseModuleFile({
+            text: result.text,
+            fileName,
+            title: titleInput.value.trim() || initialTitle,
+          });
+          undoStack.push(source.value);
+          currentText = result.text;
+          source.value = currentText;
+          dirty = true;
+          if (titleInput.value.trim() === initialTitle && nextParsed.title) {
+            titleInput.value = nextParsed.title;
+          }
+          updateStats(nextParsed);
+          progress.remove();
+          addChat(
+            'kp',
+            `已按你的要求修订正文，并重新解析为 ${moduleStats(nextParsed).chapters} 章 / ${
+              moduleStats(nextParsed).scenes
+            } 场景 / ${moduleStats(nextParsed).roles || 0} 个 HO。确认后点击「保存模组」；如果改坏了，可以撤销或恢复原文。`
+          );
+        } catch (error) {
+          progress.remove();
+          addChat('system', error.message, 'studio-chat__item--error');
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      aiButton?.addEventListener('click', sendToKp);
+      requestInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          sendToKp();
+        }
+      });
+
+      dialog.querySelector('[data-studio-cancel]')?.addEventListener('click', () => {
+        closeModal();
+        toast(dirty ? '已退回，未保存本次校订。' : '已关闭模组校订。', {
+          type: 'info',
+        });
+      });
+
+      dialog.querySelector('[data-studio-save]')?.addEventListener('click', async () => {
+        const button = dialog.querySelector('[data-studio-save]');
+        button.disabled = true;
+        button.textContent = '保存中…';
+        try {
+          const finalTitle = titleInput.value.trim();
+          const finalModule = parseModuleFile({
+            text: source.value,
+            fileName,
+            title: finalTitle,
+          });
+          const savedModule = await storage.modules.save(finalModule);
+          saved = true;
+          closeModal();
+          toast(`《${savedModule.title}》已保存：${savedModule.chunks.length} 个分块。`, {
+            type: 'success',
+            duration: 5000,
+          });
+          ctx.refresh();
+          ctx.navigate('#/modules');
+        } catch (error) {
+          toast(error.message, { type: 'error', duration: 7000 });
+          button.disabled = false;
+          button.innerHTML = `${icon('check')} 保存模组`;
+        }
+      });
+    },
+    onClose: () => {
+      const dialog = document.getElementById('app-dialog');
+      dialog?.classList.remove('modal--studio');
+    },
+  });
 }
 
 function pageHead(actions = '') {
@@ -291,9 +565,12 @@ export const moduleView = {
         body,
         footer: `<div class="modal-actions">
           <button class="btn btn--ghost" type="button" data-close-dialog>取消</button>
-          <button class="btn btn--primary" type="button" data-module-import-submit>${icon(
+          <button class="btn btn--ghost" type="button" data-module-import-submit>${icon(
             'upload'
-          )} 解析并保存</button>
+          )} 快速保存</button>
+          <button class="btn btn--primary" type="button" data-module-studio>${icon(
+            'book'
+          )} 阅读 / AI 校订</button>
         </div>`,
         onMount: (dialog) => {
           let fileName = '';
@@ -310,6 +587,18 @@ export const moduleView = {
             } catch (error) {
               toast(`读取文件失败：${error.message}`, { type: 'error' });
             }
+          });
+          dialog.querySelector('[data-module-studio]')?.addEventListener('click', () => {
+            const text = textArea.value;
+            if (!text.trim()) return toast('请先选择文件或粘贴文本。', { type: 'error' });
+            try {
+              parseModuleFile({ text, fileName, title: titleInput.value.trim() });
+            } catch (error) {
+              return toast(error.message, { type: 'error', duration: 7000 });
+            }
+            const studioTitle = titleInput.value.trim();
+            closeModal();
+            openModuleStudio({ text, fileName, title: studioTitle }, ctx);
           });
           dialog.querySelector('[data-module-import-submit]')?.addEventListener('click', async (event) => {
             const button = event.currentTarget;
@@ -370,7 +659,7 @@ export const moduleView = {
             } catch (error) {
               toast(error.message, { type: 'error', duration: 7000 });
               button.disabled = false;
-              button.textContent = '解析并保存';
+              button.innerHTML = `${icon('upload')} 快速保存`;
             }
           });
         },
