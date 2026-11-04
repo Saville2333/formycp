@@ -13,12 +13,14 @@ import {
   findScene,
   toggleKeyClue,
   setEventMustTrigger,
+  parseRolesFromText,
 } from '../module.js';
 import { createInitialKpState } from '../kp.js';
 import { auditModuleWithAI } from '../module-audit.js';
 import {
   escapeHTML,
   icon,
+  getInitials,
   formatDate,
   downloadFile,
   sanitizeFilename,
@@ -27,6 +29,32 @@ import {
   closeModal,
   confirmDialog,
 } from '../ui.js';
+
+function moduleRolesMarkup(module) {
+  const roles = module.roles || [];
+  if (!roles.length) return '';
+  return `<div class="module-roles">
+    <p class="module-audit__title">${icon('users')} HO 身份位</p>
+    <div class="module-role-list">${roles
+      .map(
+        (role) => `<article class="module-role">
+          <div class="module-role__head"><span class="tag tag--gold">${escapeHTML(
+            role.code
+          )}</span><strong>${escapeHTML(role.title)}</strong></div>
+          <p class="module-role__public">${escapeHTML(role.publicInfo || role.summary || '无公开信息')}</p>
+          ${
+            role.privateInfo
+              ? `<details class="module-role__secret"><summary>私密信息</summary><pre>${escapeHTML(
+                  role.privateInfo
+                )}</pre></details>`
+              : ''
+          }
+          ${role.goals?.length ? `<p class="module-role__goals">目标：${role.goals.map((goal) => escapeHTML(goal)).join('；')}</p>` : ''}
+        </article>`
+      )
+      .join('')}</div>
+  </div>`;
+}
 
 function moduleAuditMarkup(module) {
   const audit = module.aiAudit;
@@ -101,7 +129,7 @@ function moduleCard(module, activeCampaign) {
       <div class="module-card__id">
         <h2 class="module-card__title">${escapeHTML(module.title)}</h2>
         <p class="module-card__meta">${escapeHTML(
-          `${stats.chapters} 章 · ${stats.scenes} 场景 · ${stats.clues} 线索 · ${stats.npcs} NPC · ${stats.chunks} 分块`
+          `${stats.chapters} 章 · ${stats.scenes} 场景 · ${stats.clues} 线索 · ${stats.npcs} NPC · ${stats.roles || 0} HO · ${stats.chunks} 分块`
         )}</p>
       </div>
       <div class="module-card__badges">
@@ -353,6 +381,10 @@ export const moduleView = {
       const module = await storage.modules.get(element.dataset.moduleId);
       if (!module) return toast('模组不存在。', { type: 'error' });
       const stats = moduleStats(module);
+      const rolesForView =
+        module.roles?.length || !module.source?.rawText
+          ? module.roles || []
+          : parseRolesFromText(module.source.rawText);
       const chapterMarkup = (module.structure?.chapters || [])
         .map(
           (chapter) => `<details class="module-tree__chapter" ${chapter.order === 0 ? 'open' : ''}>
@@ -382,9 +414,10 @@ export const moduleView = {
       const clues = module.clues || [];
       const events = module.events || [];
       const body = `<div class="module-summary">
-        <p class="modal-copy">${stats.chapters} 章 · ${stats.scenes} 场景 · ${stats.clues} 线索 · ${stats.npcs} NPC · ${stats.events} 事件 · ${stats.chunks} 分块</p>
+        <p class="modal-copy">${stats.chapters} 章 · ${stats.scenes} 场景 · ${stats.clues} 线索 · ${stats.npcs} NPC · ${stats.events} 事件 · ${rolesForView.length} HO · ${stats.chunks} 分块</p>
       </div>
       ${moduleAuditMarkup(module)}
+      ${moduleRolesMarkup({ ...module, roles: rolesForView })}
       <div class="module-tree">${chapterMarkup || '<p class="modal-copy">尚未生成章节结构。</p>'}</div>
       <div class="sheet-section">
         <h4 class="sheet-section__title">关键线索</h4>
@@ -584,20 +617,154 @@ export const moduleView = {
         });
         return;
       }
-      const campaign = storage.campaigns.save({
-        title: module.title,
-        status: 'active',
-        moduleId: module.id,
-        moduleTitle: module.title,
-        playerCharacterIds: characters.map((character) => character.id),
-        npcIds: (module.npcs || []).map((npc) => npc.id),
-        kpState: createInitialKpState(module),
-        settings: storage.settings.get().kp,
-        lastPlayedAt: new Date().toISOString(),
+      let roles = (module.roles || []).filter((role) => role.title);
+      if (!roles.length && module.source?.rawText) {
+        roles = parseRolesFromText(module.source.rawText);
+      }
+      const defaultAssignments = roles.map((role, index) => characters[index]?.id || '');
+      const body = document.createElement('div');
+      body.innerHTML = `<p class="modal-copy">选择你亲自扮演的调查员。其余调查员由 AI 扮演，你可以随时让他们行动。模组识别到 <strong>${
+        roles.length
+      }</strong> 个 HO 身份位。</p>
+      <div class="settings-subsection">
+        <h4 class="settings-subsection__title">${icon('users')} 你扮演谁？</h4>
+        <div class="pov-choice-list">
+          ${characters
+            .map(
+              (character, index) => `<label class="pov-choice">
+                <input type="radio" name="campaign-pov" value="${escapeHTML(character.id)}" ${
+                  index === 0 ? 'checked' : ''
+                }>
+                <span class="pov-choice__avatar">${escapeHTML(getInitials(character.name))}</span>
+                <span class="pov-choice__body"><strong>${escapeHTML(character.name)}</strong><small>${escapeHTML(
+                  character.occupation || '调查员'
+                )} · ${escapeHTML(character.age || '?')} 岁</small></span>
+                <span class="tag">可选</span>
+              </label>`
+            )
+            .join('')}
+        </div>
+      </div>
+      ${
+        roles.length
+          ? `<div class="settings-subsection">
+              <h4 class="settings-subsection__title">${icon('scroll')} HO 身份分配</h4>
+              <p class="form-help">每个 HO 只能分配给一位调查员。你的角色必须分配一个身份；其他身份交给 AI 调查员。私密信息只会进入对应角色与 AI 的上下文，不会显示在你的界面上。</p>
+              <div class="role-assignment-list">
+                ${roles
+                  .map(
+                    (role, index) => `<div class="role-assignment">
+                      <div class="role-assignment__info">
+                        <span class="tag tag--gold">${escapeHTML(role.code)}</span>
+                        <strong>${escapeHTML(role.title)}</strong>
+                        <p>${escapeHTML(role.summary || role.publicInfo || '无公开身份说明')}</p>
+                      </div>
+                      <select class="form-input" data-role-assign="${escapeHTML(role.id)}" aria-label="${escapeHTML(
+                        `${role.code} ${role.title} 分配给谁`
+                      )}">
+                        <option value="">不分配</option>
+                        ${characters
+                          .map(
+                            (character) =>
+                              `<option value="${escapeHTML(character.id)}" ${
+                                defaultAssignments[index] === character.id ? 'selected' : ''
+                              }>${escapeHTML(character.name)}</option>`
+                          )
+                          .join('')}
+                      </select>
+                    </div>`
+                  )
+                  .join('')}
+              </div>
+              ${
+                roles.length > characters.length
+                  ? `<p class="form-help form-help--danger">HO 数量多于调查员；未分配的身份不会进入本场战役。</p>`
+                  : ''
+              }
+            </div>`
+          : `<div class="info-strip">${icon(
+              'alert'
+            )}<span>这份模组没有识别到 HO 身份位。本场将直接使用调查员原有详细设定；你仍然可以选择自己扮演的角色。</span></div>`
+      }
+      <div class="info-strip">${icon('key')}<span>开始后，KP 会自动开场第一幕。你的私密信息只会出现在「你的身份」面板；AI 角色的私密信息不会写入你的界面或公开日志。</span></div>`;
+      openModal({
+        eyebrow: 'Campaign Setup',
+        title: '选择视角与身份',
+        body,
+        footer: `<div class="modal-actions">
+          <button class="btn btn--ghost" type="button" data-close-dialog>取消</button>
+          <button class="btn btn--primary" type="button" data-start-campaign>${icon(
+            'arrow-right'
+          )} 开始战役</button>
+        </div>`,
+        onMount: (dialog) => {
+          dialog.querySelector('[data-start-campaign]')?.addEventListener('click', () => {
+            const povCharacterId = dialog.querySelector('input[name="campaign-pov"]:checked')?.value;
+            if (!povCharacterId) return toast('请选择你扮演的调查员。', { type: 'error' });
+            const assignments = [];
+            const usedCharacters = new Set();
+            for (const role of roles) {
+              const select = [...dialog.querySelectorAll('[data-role-assign]')].find(
+                (element) => element.dataset.roleAssign === role.id
+              );
+              const characterId = select?.value || '';
+              if (!characterId) continue;
+              if (usedCharacters.has(characterId)) {
+                return toast('一位调查员不能同时分配到两个 HO 身份。', { type: 'error' });
+              }
+              usedCharacters.add(characterId);
+              assignments.push({
+                roleId: role.id,
+                characterId,
+                code: role.code,
+                title: role.title,
+                summary: role.summary || '',
+                publicInfo: role.publicInfo || '',
+                privateInfo: role.privateInfo || '',
+                persona: role.persona || '',
+                goals: role.goals || [],
+                ending: role.ending || '',
+              });
+            }
+            if (roles.length && !assignments.some((assignment) => assignment.characterId === povCharacterId)) {
+              return toast('请先为你要扮演的调查员分配一个 HO 身份。', { type: 'error' });
+            }
+            const privateNotes = assignments
+              .filter((assignment) => assignment.privateInfo)
+              .map((assignment) => ({
+                characterId: assignment.characterId,
+                roleId: assignment.roleId,
+                title: `${assignment.code} ${assignment.title} · 私密信息`,
+                content: assignment.privateInfo,
+                source: 'role',
+              }));
+            const campaign = storage.campaigns.save({
+              title: module.title,
+              status: 'active',
+              moduleId: module.id,
+              moduleTitle: module.title,
+              playerCharacterIds: characters.map((character) => character.id),
+              povCharacterId,
+              roleAssignments: assignments,
+              privateNotes,
+              openingPending: true,
+              memoryChoice: '',
+              ending: null,
+              npcIds: (module.npcs || []).map((npc) => npc.id),
+              kpState: createInitialKpState(module),
+              settings: storage.settings.get().kp,
+              lastPlayedAt: new Date().toISOString(),
+            });
+            storage.campaigns.setActive(campaign.id);
+            toast(`战役《${campaign.title}》已开始；KP 正在开场。`, {
+              type: 'success',
+              duration: 4500,
+            });
+            closeModal();
+            ctx.navigate('#/table');
+          });
+        },
       });
-      storage.campaigns.setActive(campaign.id);
-      toast(`战役《${campaign.title}》已开始。`, { type: 'success' });
-      ctx.navigate('#/table');
     },
 
     async 'export-module'(element) {

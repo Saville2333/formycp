@@ -1123,7 +1123,7 @@ export const characterView = {
           age: draft.age,
           maxRetries: 2,
           onAttempt: (attempt, total) => {
-            if (status) status.textContent = `第 ${attempt} / ${total} 次尝试：生成并校验 JSON…`;
+            if (status) status.textContent = `第 ${attempt} / ${total} 次尝试：生成并分配总点数…`;
           },
           callModel: async (messages) => {
             const completion = await api.complete(profile, messages, {
@@ -1135,8 +1135,16 @@ export const characterView = {
         });
         draft = applyBuildToCharacter(draft, result.build);
         syncDraft(draft);
-        aiStatus = `AI 车卡完成（${result.attempts} 次尝试），已应用年龄修正与规则校验。`;
-        toast('AI 车卡完成，已写入工作台。', { type: 'success' });
+        const totals = result.validation?.totals;
+        aiStatus = totals
+          ? `AI 车卡完成（${result.attempts} 次尝试）：职业点 ${totals.occupationSpent}/${totals.occupationBudget}，兴趣点 ${totals.interestSpent}/${totals.interestBudget}，已按总预算精确分配。`
+          : `AI 车卡完成（${result.attempts} 次尝试），已应用年龄修正与规则校验。`;
+        toast(
+          totals
+            ? `AI 车卡完成：职业点 ${totals.occupationSpent}/${totals.occupationBudget}，兴趣点 ${totals.interestSpent}/${totals.interestBudget}。`
+            : 'AI 车卡完成，已写入工作台。',
+          { type: 'success' }
+        );
         ctx.refresh();
       } catch (error) {
         aiStatus = `AI 车卡失败：${error.message}`;

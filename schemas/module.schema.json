@@ -71,6 +71,27 @@
       "type": "array",
       "items": { "$ref": "#/$defs/event" }
     },
+    "roles": {
+      "type": "array",
+      "description": "模组中的 HO / PC 身份位，用于跑团开始时分配给调查员。",
+      "items": {
+        "type": "object",
+        "required": ["id", "code", "title"],
+        "properties": {
+          "id": { "type": "string", "maxLength": 80 },
+          "code": { "type": "string", "maxLength": 40 },
+          "title": { "type": "string", "maxLength": 300 },
+          "summary": { "type": "string", "maxLength": 2000 },
+          "publicInfo": { "type": "string", "maxLength": 8000 },
+          "privateInfo": { "type": "string", "maxLength": 16000 },
+          "persona": { "type": "string", "maxLength": 24000 },
+          "goals": { "type": "array", "items": { "type": "string", "maxLength": 500 } },
+          "ending": { "type": "string", "maxLength": 8000 },
+          "description": { "type": "string", "maxLength": 24000 }
+        },
+        "additionalProperties": false
+      }
+    },
     "retrieval": {
       "type": "object",
       "properties": {

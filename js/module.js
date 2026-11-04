@@ -224,11 +224,15 @@ function parseHeadingTree(text) {
   return root;
 }
 
-function collectNodeText(node, { includeChildren = true } = {}) {
+function collectNodeText(node, { includeChildren = true, skipNodes = null } = {}) {
   const parts = [...node.content];
   if (includeChildren) {
     for (const child of node.children) {
-      parts.push(`\n## ${child.title}\n`, collectNodeText(child, { includeChildren: true }));
+      if (skipNodes?.has(child)) continue;
+      parts.push(
+        `\n## ${child.title}\n`,
+        collectNodeText(child, { includeChildren: true, skipNodes })
+      );
     }
   }
   return parts.join('\n').trim();
@@ -245,13 +249,14 @@ function extractReadAloud(text) {
   return readAloud.join('\n').trim();
 }
 
-function detectSpecialSections(sceneNode, sceneId, chapterId, counters) {
+function detectSpecialSections(sceneNode, sceneId, chapterId, counters, skipNodes = null) {
   const clues = [];
   const npcs = [];
   const events = [];
 
   function walk(node) {
     for (const child of node.children) {
+      if (skipNodes?.has(child)) continue;
       const title = child.title;
       const description = collectNodeText(child, { includeChildren: true });
       if (/线索/.test(title)) {
@@ -297,9 +302,111 @@ function detectSpecialSections(sceneNode, sceneId, chapterId, counters) {
   return { clues, npcs, events };
 }
 
+const ROLE_HEADING =
+  /^(HO\s*\d+|PC\s*\d+|玩家角色\s*\d*|角色\s*[A-Za-z0-9一二三四五六七八九十]+)\s*[：:、.\-—–]?\s*(.*)$/i;
+const ROLE_HEADING_PREFIXED =
+  /^(?:角色|身份)\s*[：:]\s*(HO\s*\d+|PC\s*\d+)\s*[：:、.\-—–]?\s*(.*)$/i;
+
+const ROLE_FIELD_LABELS = [
+  { key: 'publicInfo', label: '公开信息', regex: /^(?:公开信息|公开设定|公开情报|所有人知道|公开)[：:]\s*/ },
+  {
+    key: 'privateInfo',
+    label: '私密信息',
+    regex: /^(?:秘密|私密信息|私密设定|只有你知道|仅你(?:自己)?知道|隐藏信息)[：:]\s*/,
+  },
+  { key: 'persona', label: '角色设定', regex: /^(?:人设|角色设定|人物设定|扮演|性格)[：:]\s*/ },
+  { key: 'ending', label: '结局', regex: /^(?:结局|命运|最终结局)[：:]\s*/ },
+  { key: 'goals', label: '目标', regex: /^(?:目标|目的|动机)[：:]\s*/ },
+];
+
+function matchRoleField(line) {
+  const cleaned = stripMarkdown(line).trim();
+  for (const field of ROLE_FIELD_LABELS) {
+    if (field.regex.test(cleaned)) {
+      return { key: field.key, value: cleaned.replace(field.regex, '').trim() };
+    }
+  }
+  return null;
+}
+
+function parseRoleFields(body) {
+  const fields = {};
+  let current = '';
+  for (const rawLine of normalizeNewlines(body).split('\n')) {
+    if (/^#{1,6}\s/.test(rawLine)) continue;
+    const matched = matchRoleField(rawLine);
+    if (matched) {
+      current = matched.key;
+      fields[current] = [fields[current], matched.value].filter(Boolean).join('\n').trim();
+      continue;
+    }
+    if (!current || !rawLine.trim()) continue;
+    fields[current] = `${fields[current] || ''}\n${stripMarkdown(rawLine)}`.trim();
+  }
+  const goals = (fields.goals || '')
+    .split(/\n|[；;、]/)
+    .map((item) => item.replace(/^[-*•]\s*/, '').trim())
+    .filter(Boolean)
+    .slice(0, 12);
+  return { ...fields, goals };
+}
+
+function extractRoles(root) {
+  const roles = [];
+  const nodes = new Set();
+  let counter = 0;
+
+  function walk(node) {
+    for (const child of node.children) {
+      const matched = child.title.match(ROLE_HEADING) || child.title.match(ROLE_HEADING_PREFIXED);
+      if (matched) {
+        const body = collectNodeText(child, { includeChildren: true }).trim();
+        const fields = parseRoleFields(body);
+        const code = matched[1].replace(/\s+/g, '').toUpperCase();
+        const title = matched[2].trim() || '未命名身份';
+        const publicInfo = sliceText(fields.publicInfo || body, fields.publicInfo ? 4000 : 600);
+        const privateInfo = sliceText(fields.privateInfo || body, 16000);
+        const persona = sliceText(fields.persona || body, 12000);
+        roles.push({
+          id: createId('role', ++counter),
+          code,
+          title,
+          summary: sliceText(publicInfo || body, 220),
+          publicInfo,
+          privateInfo,
+          persona,
+          goals: fields.goals || [],
+          ending: sliceText(fields.ending || '', 4000),
+          description: sliceText(body, 24000),
+        });
+        nodes.add(child);
+      }
+      walk(child);
+    }
+  }
+
+  walk(root);
+  return { roles, nodes };
+}
+
+/** 兼容旧模组：没有 roles 字段时，从 rawText 重新扫描 HO 标题。 */
+export function parseRolesFromText(text) {
+  if (!String(text || '').trim()) return [];
+  return extractRoles(parseHeadingTree(normalizeNewlines(text))).roles;
+}
+
 function buildFromTree(root, { title, fileName, type }) {
-  const h1 = root.children.filter((node) => node.level === 1);
-  const h2 = root.children.filter((node) => node.level === 2);
+  const roleData = extractRoles(root);
+  const roleNodes = roleData.nodes;
+  const isRoleContainer = (node) => {
+    if (!/^(角色|身份|HO|PC|玩家角色|角色分配)/i.test(node.title || '')) return false;
+    const children = node.children.filter((child) => child.level === node.level + 1);
+    return children.length > 0 && children.every((child) => roleNodes.has(child));
+  };
+  const h1 = root.children.filter(
+    (node) => node.level === 1 && !roleNodes.has(node) && !isRoleContainer(node)
+  );
+  const h2 = root.children.filter((node) => node.level === 2 && !roleNodes.has(node));
   const chapterNodes = h1.length ? h1 : [];
   let syntheticChapter = null;
 
@@ -322,13 +429,17 @@ function buildFromTree(root, { title, fileName, type }) {
 
   for (const chapterNode of chapterNodes) {
     const chapterId = createId('ch', ++counters.chapter);
-    let sceneNodes = chapterNode.children.filter((node) => node.level === 2);
+    let sceneNodes = chapterNode.children.filter(
+      (node) => node.level === 2 && !roleNodes.has(node)
+    );
     if (!sceneNodes.length) {
       sceneNodes = [
         {
           level: 2,
           title: chapterNode.title,
-          children: chapterNode.children.filter((node) => node.level > 2),
+          children: chapterNode.children.filter(
+            (node) => node.level > 2 && !roleNodes.has(node)
+          ),
           content: chapterNode.content,
         },
       ];
@@ -337,8 +448,8 @@ function buildFromTree(root, { title, fileName, type }) {
     const scenes = [];
     for (const sceneNode of sceneNodes) {
       const sceneId = createId('sc', ++counters.scene);
-      const body = collectNodeText(sceneNode, { includeChildren: true });
-      const special = detectSpecialSections(sceneNode, sceneId, chapterId, counters);
+      const body = collectNodeText(sceneNode, { includeChildren: true, skipNodes: roleNodes });
+      const special = detectSpecialSections(sceneNode, sceneId, chapterId, counters, roleNodes);
       clues.push(...special.clues);
       for (const npc of special.npcs) {
         const existing = npcs.find((item) => item.name === npc.name);
@@ -380,7 +491,11 @@ function buildFromTree(root, { title, fileName, type }) {
       id: chapterId,
       title: chapterNode.title,
       order: chapters.length,
-      summary: sliceText(collectNodeText(chapterNode, { includeChildren: false }) || scenes[0]?.summary, 240),
+      summary: sliceText(
+        collectNodeText(chapterNode, { includeChildren: false, skipNodes: roleNodes }) ||
+          scenes[0]?.summary,
+        240
+      ),
       unlocked: chapters.length === 0,
       scenes,
     });
@@ -447,6 +562,7 @@ function buildFromTree(root, { title, fileName, type }) {
     clues,
     npcs,
     events,
+    roles: roleData.roles,
     retrieval: { method: 'tfidf', index: {}, builtAt: nowIso() },
     meta: {
       estimatedDuration: '',
@@ -466,6 +582,22 @@ function typeFromFilename(fileName) {
   return 'paste';
 }
 
+function normalizeRole(input, index = 0) {
+  const role = input && typeof input === 'object' ? input : {};
+  return {
+    id: String(role.id || createId('role', index + 1)),
+    code: String(role.code || `HO${index + 1}`),
+    title: String(role.title || role.name || '未命名身份'),
+    summary: String(role.summary || role.publicInfo || role.description || '').slice(0, 600),
+    publicInfo: String(role.publicInfo || role.public || role.summary || '').slice(0, 4000),
+    privateInfo: String(role.privateInfo || role.secret || role.private || '').slice(0, 8000),
+    persona: String(role.persona || role.setting || role.description || '').slice(0, 12000),
+    goals: Array.isArray(role.goals) ? role.goals.map(String).slice(0, 12) : [],
+    ending: String(role.ending || '').slice(0, 4000),
+    description: String(role.description || role.persona || '').slice(0, 12000),
+  };
+}
+
 function normalizeExistingModule(input, { fileName, type }) {
   const module = JSON.parse(JSON.stringify(input));
   module.schemaVersion = MODULE_SCHEMA_VERSION;
@@ -483,6 +615,9 @@ function normalizeExistingModule(input, { fileName, type }) {
   module.clues = Array.isArray(module.clues) ? module.clues : [];
   module.npcs = Array.isArray(module.npcs) ? module.npcs : [];
   module.events = Array.isArray(module.events) ? module.events : [];
+  module.roles = Array.isArray(module.roles)
+    ? module.roles.map((role, index) => normalizeRole(role, index))
+    : [];
   module.meta = module.meta || {};
 
   if (!module.chunks.length && Array.isArray(module.structure.chapters)) {
@@ -685,6 +820,7 @@ export function moduleStats(module) {
     clues: module?.clues?.length || 0,
     npcs: module?.npcs?.length || 0,
     events: module?.events?.length || 0,
+    roles: module?.roles?.length || 0,
     chunks: module?.chunks?.length || 0,
     keywords: Object.keys(module?.retrieval?.index || {}).length,
   };
@@ -751,6 +887,19 @@ export function moduleToMarkdown(module) {
   return `# ${module.title}
 
 > ${module.description || '无简介'}
+
+${
+  module.roles?.length
+    ? `## HO 身份\n\n${module.roles
+        .map(
+          (role) =>
+            `### ${role.code}：${role.title}\n\n${role.publicInfo || role.summary || ''}${
+              role.privateInfo ? `\n\n**私密信息**：${role.privateInfo}` : ''
+            }`
+        )
+        .join('\n\n')}`
+    : ''
+}
 
 ${(module.structure?.chapters || [])
   .map(

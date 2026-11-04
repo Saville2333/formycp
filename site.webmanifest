@@ -1,0 +1,27 @@
+{
+  "name": "Cthulhu Table · 克苏鲁跑团桌面",
+  "short_name": "Cthulhu Table",
+  "description": "纯前端、本地优先的克苏鲁的呼唤第七版 AI 跑团桌面。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#07100d",
+  "theme_color": "#07100d",
+  "categories": ["games", "entertainment", "roleplay"],
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

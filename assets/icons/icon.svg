@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Cthulhu Table">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="72%">
+      <stop offset="0%" stop-color="#1a392c"/>
+      <stop offset="52%" stop-color="#0d2018"/>
+      <stop offset="100%" stop-color="#050c09"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0dfb1"/>
+      <stop offset="46%" stop-color="#c6a868"/>
+      <stop offset="100%" stop-color="#826a3a"/>
+    </linearGradient>
+    <linearGradient id="tentacle" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d9bd7e"/>
+      <stop offset="100%" stop-color="#8e733e"/>
+    </linearGradient>
+    <radialGradient id="eyeGlow" cx="50%" cy="46%" r="58%">
+      <stop offset="0%" stop-color="#f4e4b9"/>
+      <stop offset="72%" stop-color="#c6a868"/>
+      <stop offset="100%" stop-color="#8d713b"/>
+    </radialGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="8" y="8" width="496" height="496" rx="112" fill="url(#bg)" stroke="#332b1c" stroke-width="4"/>
+  <rect x="25" y="25" width="462" height="462" rx="96" fill="none" stroke="#b89a5d" stroke-width="2" opacity=".26"/>
+
+  <g fill="none" stroke="url(#gold)" stroke-linecap="round">
+    <circle cx="256" cy="250" r="170" stroke-width="9" opacity=".92"/>
+    <circle cx="256" cy="250" r="151" stroke-width="2.4" opacity=".42"/>
+    <path d="M256 64v18M256 418v18M70 250h18M424 250h18" stroke-width="8" opacity=".84"/>
+    <path d="m128 122 12 12M372 366l12 12M384 122l-12 12M140 366l-12 12" stroke-width="5" opacity=".46"/>
+  </g>
+
+  <g fill="#c6a868" opacity=".72">
+    <circle cx="256" cy="91" r="4.2"/>
+    <circle cx="256" cy="409" r="4.2"/>
+    <circle cx="97" cy="250" r="4.2"/>
+    <circle cx="415" cy="250" r="4.2"/>
+  </g>
+
+  <g filter="url(#softGlow)">
+    <path d="M112 248c46-67 242-67 288 0-46 67-242 67-288 0Z" fill="url(#eyeGlow)" stroke="#f0dfb1" stroke-width="3.5"/>
+    <path d="M132 248c38-50 210-50 248 0-38 50-210 50-248 0Z" fill="none" stroke="#5f4a26" stroke-width="2" opacity=".45"/>
+    <ellipse cx="256" cy="248" rx="33" ry="61" fill="#06100c"/>
+    <ellipse cx="256" cy="248" rx="17" ry="58" fill="#020705"/>
+    <circle cx="243" cy="226" r="8.5" fill="#f6e8c2" opacity=".92"/>
+    <circle cx="271" cy="266" r="4.5" fill="#b89a5d" opacity=".5"/>
+  </g>
+
+  <g fill="none" stroke="url(#tentacle)" stroke-width="18" stroke-linecap="round">
+    <path d="M198 292c-42 45-34 95 14 121"/>
+    <path d="M231 300c-20 47-9 86 25 109"/>
+    <path d="M281 300c20 47 9 86-25 109"/>
+    <path d="M314 292c42 45 34 95-14 121"/>
+  </g>
+  <g fill="none" stroke="#5d4a27" stroke-width="5" stroke-linecap="round" opacity=".7">
+    <path d="M188 322c-15 23-16 48-4 67"/>
+    <path d="M228 329c-7 24-1 47 12 63"/>
+    <path d="M284 329c7 24 1 47-12 63"/>
+    <path d="M324 322c15 23 16 48 4 67"/>
+  </g>
+
+  <g fill="none" stroke="url(#gold)" stroke-linecap="round" opacity=".86">
+    <path d="M256 112v31" stroke-width="10"/>
+    <path d="m220 121 18 27M292 121l-18 27" stroke-width="8"/>
+    <path d="M164 250h22M326 250h22" stroke-width="6" opacity=".55"/>
+  </g>
+
+  <g fill="#c6a868" opacity=".9">
+    <path d="m256 148 5.4 11 12.1 1.8-8.8 8.6 2.1 12.1-10.8-5.7-10.8 5.7 2.1-12.1-8.8-8.6 12.1-1.8Z"/>
+  </g>
+</svg>

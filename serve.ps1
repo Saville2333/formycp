@@ -23,6 +23,7 @@ function Get-MimeType([string]$path) {
     '.js'   { return 'text/javascript; charset=utf-8' }
     '.mjs'  { return 'text/javascript; charset=utf-8' }
     '.json' { return 'application/json; charset=utf-8' }
+    '.webmanifest' { return 'application/manifest+json; charset=utf-8' }
     '.svg'  { return 'image/svg+xml' }
     '.png'  { return 'image/png' }
     '.jpg'  { return 'image/jpeg' }

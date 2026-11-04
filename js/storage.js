@@ -629,6 +629,38 @@ function readCampaignContainer() {
   return clone(EMPTY_CAMPAIGNS);
 }
 
+function normalizeRoleAssignment(input) {
+  const source = isPlainObject(input) ? clone(input) : {};
+  return {
+    roleId: String(source.roleId || ''),
+    characterId: String(source.characterId || ''),
+    code: String(source.code || ''),
+    title: String(source.title || ''),
+    summary: String(source.summary || ''),
+    publicInfo: String(source.publicInfo || ''),
+    privateInfo: String(source.privateInfo || ''),
+    persona: String(source.persona || ''),
+    goals: Array.isArray(source.goals) ? source.goals.map(String).slice(0, 12) : [],
+    ending: String(source.ending || ''),
+  };
+}
+
+function normalizePrivateNote(input) {
+  const source = isPlainObject(input) ? clone(input) : {};
+  return {
+    id: String(source.id || createId('note')),
+    characterId: String(source.characterId || ''),
+    roleId: String(source.roleId || ''),
+    title: String(source.title || '私密信息').slice(0, 300),
+    content: String(source.content || '').slice(0, 12000),
+    source: ['role', 'keeper', 'clue', 'manual'].includes(source.source)
+      ? source.source
+      : 'role',
+    visibility: 'private',
+    createdAt: normalizeDate(source.createdAt),
+  };
+}
+
 function normalizeCampaign(input) {
   const source = isPlainObject(input) ? clone(input) : {};
   const timestamp = nowIso();
@@ -645,6 +677,25 @@ function normalizeCampaign(input) {
     playerCharacterIds: Array.isArray(source.playerCharacterIds)
       ? source.playerCharacterIds.map(String)
       : [],
+    povCharacterId: String(source.povCharacterId || ''),
+    roleAssignments: Array.isArray(source.roleAssignments)
+      ? source.roleAssignments.map(normalizeRoleAssignment).filter((item) => item.roleId && item.characterId)
+      : [],
+    privateNotes: Array.isArray(source.privateNotes)
+      ? source.privateNotes.map(normalizePrivateNote).filter((item) => item.characterId)
+      : [],
+    openingPending: Boolean(source.openingPending),
+    memoryChoice: ['engrave', 'discard'].includes(source.memoryChoice)
+      ? source.memoryChoice
+      : '',
+    ending: isPlainObject(source.ending)
+      ? {
+          title: String(source.ending.title || ''),
+          text: String(source.ending.text || ''),
+          povFate: String(source.ending.povFate || ''),
+          at: source.ending.at || null,
+        }
+      : null,
     npcIds: Array.isArray(source.npcIds) ? source.npcIds.map(String) : [],
     chatIds: Array.isArray(source.chatIds) ? source.chatIds.map(String) : [],
     activeChapterId: source.activeChapterId || source.kpState?.currentChapterId || null,

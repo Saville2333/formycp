@@ -19,7 +19,8 @@ export const ACTOR_SYSTEM_PROMPT = `你是《克苏鲁的呼唤》第七版中�
 3. 必须从角色技能中选择一项用于本次行动检定，输出 skill；difficulty 只能是 regular / hard / extreme。
 4. 不替守秘人描写行动结果，不宣布成功或失败，不编造骰点，不控制其他角色。
 5. 遵守角色详细设定、既有记忆与世界书；不知道的事不要装作知道。
-6. 只输出严格 JSON，不要 Markdown 代码围栏：
+6. 你的私密信息只用于决定行动与态度，不能直接把秘密、幕后真相或只有你知道的模组信息说出口；只能通过可观察的行动、停顿、回避或暗示表现。
+7. 只输出严格 JSON，不要 Markdown 代码围栏：
 {
   "reply": "不超过100字，包含台词与行动",
   "action": "一句话概括的行动",
@@ -48,7 +49,14 @@ function worldbookText(entries, limit = 6) {
     .join('\n');
 }
 
-export function buildActorMessages({ character, campaign, module, chat, worldbook = [] }) {
+export function buildActorMessages({
+  character,
+  campaign,
+  module,
+  chat,
+  worldbook = [],
+  privateNotes = [],
+}) {
   const memories = (character.memories || [])
     .slice(-5)
     .map((memory) => `《${memory.moduleTitle || '过往模组'}》${memory.summary}`)
@@ -75,6 +83,11 @@ export function buildActorMessages({ character, campaign, module, chat, worldboo
       role: 'user',
       content: `【调查员】
 姓名：${character.name}
+本场身份：${
+        character.roleAssignment
+          ? `${character.roleAssignment.code} · ${character.roleAssignment.title}`
+          : '未分配 HO，使用原人设'
+      }
 职业：${character.occupation || '未知'}；年龄：${character.age || '?'}
 HP ${derived.hp?.current ?? '?'}/${derived.hp?.max ?? '?'}；SAN ${derived.san?.current ?? '?'}/${derived.san?.max ?? '?'}；MP ${derived.mp?.current ?? '?'}/${derived.mp?.max ?? '?'}
 技能：${skills || '无'}
@@ -82,6 +95,9 @@ HP ${derived.hp?.current ?? '?'}/${derived.hp?.max ?? '?'}；SAN ${derived.san?.
 
 【详细角色设定】
 ${clip(detail, 12000) || '未填写'}
+
+【你的私密信息（仅你与 KP 知道，禁止直接说破）】
+${privateNotes.map((note) => `- ${note.title}：${clip(note.content, 2000)}`).join('\n') || '无'}
 
 【跨模组记忆】
 ${memories || '无'}
@@ -118,7 +134,7 @@ export function parseActorResponse(text) {
   }
 }
 
-export function validateActorResponse(payload, character) {
+export function validateActorResponse(payload, character, privateNotes = []) {
   const reply = String(payload?.reply || '').trim();
   const action = String(payload?.action || '').trim();
   const skills = characterSkills(character);
@@ -127,6 +143,23 @@ export function validateActorResponse(payload, character) {
   if (!reply) errors.push('reply 不能为空。');
   if (charLength(reply) > 100) errors.push(`reply 为 ${charLength(reply)} 字，超过 100 字上限。`);
   if (!action) errors.push('action 不能为空。');
+  // 粗略防止模型把私密设定原句说出口：命中 6 字以上连续片段就要求重写。
+  for (const note of privateNotes) {
+    const secret = String(note.content || '').replace(/\s+/g, '');
+    const cleanReply = reply.replace(/\s+/g, '');
+    if (secret.length < 6) continue;
+    let leaked = false;
+    for (let index = 0; index + 6 <= secret.length; index += 1) {
+      if (cleanReply.includes(secret.slice(index, index + 6))) {
+        leaked = true;
+        break;
+      }
+    }
+    if (leaked) {
+      errors.push('reply 直接说出了角色私密信息，请改为行动/暗示。');
+      break;
+    }
+  }
   const requestedSkill = String(payload?.skill || '').trim();
   const fallbackSkill = skills.find((skill) => skill.name === '侦查')?.name || skills[0]?.name || '';
   const skill = skillNames.has(requestedSkill) ? requestedSkill : fallbackSkill;
@@ -161,10 +194,18 @@ export async function generateActorAction({
   module,
   chat,
   worldbook = [],
+  privateNotes = [],
   maxRetries = 1,
 }) {
   if (!profile) throw new Error('请先配置 AI 接口。');
-  const messages = buildActorMessages({ character, campaign, module, chat, worldbook });
+  const messages = buildActorMessages({
+    character,
+    campaign,
+    module,
+    chat,
+    worldbook,
+    privateNotes,
+  });
   let lastError = '';
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     const completion = await api.complete(profile, messages, {
@@ -175,7 +216,7 @@ export async function generateActorAction({
     });
     try {
       const payload = parseActorResponse(completion.content);
-      const validation = validateActorResponse(payload, character);
+      const validation = validateActorResponse(payload, character, privateNotes);
       if (validation.valid) {
         return { ...validation.value, raw: payload, usage: completion.usage, attempts: attempt + 1 };
       }

@@ -343,7 +343,7 @@ function formatNpcAttitudes(state) {
     .join('\n');
 }
 
-function formatCharacters(characters) {
+function formatCharacters(characters, { povCharacterId = '', privateNotes = [] } = {}) {
   if (!characters?.length) return '（本场暂无玩家调查员）';
   return characters
     .map((character) => {
@@ -354,19 +354,36 @@ function formatCharacters(characters) {
         .slice(0, 12)
         .map((skill) => `${skill.name} ${skill.total}`)
         .join('、');
-      const memories = (character.memories || [])
-        .slice(-3)
-        .map((memory) => `《${memory.moduleTitle || '过往模组'}》${memory.summary}`)
-        .join('；');
-      const roleplaySetting = String(character.detailedSetting || '').trim();
-      return `### ${character.name}（${character.kind === 'npc' ? 'NPC' : 'PL'}）
+      const isPov = character.id === povCharacterId;
+      const memories = isPov
+        ? (character.memories || [])
+            .slice(-3)
+            .map((memory) => `《${memory.moduleTitle || '过往模组'}》${memory.summary}`)
+            .join('；')
+        : '';
+      const roleplaySetting = isPov ? String(character.detailedSetting || '').trim() : '';
+      const assignment = character.roleAssignment;
+      const ownNotes = (privateNotes || []).filter(
+        (note) => note.characterId === character.id
+      );
+      return `### ${character.name}（${character.kind === 'npc' ? 'NPC' : 'PL'}${isPov ? ' / 玩家视角' : ' / AI 控制'}）
 - 职业：${character.occupation || '未填写'}；年龄：${character.age || '?'}
+- 本场身份：${assignment ? `${assignment.code} · ${assignment.title}` : '未分配 HO，使用原人设'}
+${assignment?.publicInfo ? `- 身份公开信息：${assignment.publicInfo.slice(0, 700)}` : ''}
 - HP ${derived.hp?.current ?? '?'}/${derived.hp?.max ?? '?'}；SAN ${derived.san?.current ?? '?'}/${derived.san?.max ?? '?'}；MP ${derived.mp?.current ?? '?'}/${derived.mp?.max ?? '?'}；MOV ${derived.mov ?? '?'}
 - 关键技能：${skills || '未记录'}
 - 重要物品：${(character.possessions || []).slice(0, 8).join('、') || '未记录'}
 - 人设摘要：${String(character.background || character.appearance || '').slice(0, 260)}
-${roleplaySetting ? `- 角色扮演设定摘要：${roleplaySetting.slice(0, 700)}` : ''}
-${memories ? `- 跨模组记忆：${memories}` : ''}`;
+${roleplaySetting ? `- 角色扮演设定摘要：${roleplaySetting.slice(0, 900)}` : ''}
+${memories ? `- 跨模组记忆：${memories}` : ''}
+${
+  isPov && ownNotes.length
+    ? `- 仅 ${character.name} 知道的私密信息（不得直接向其他角色公开）：${ownNotes
+        .map((note) => note.content)
+        .join('；')
+        .slice(0, 1200)}`
+    : ''
+}`;
     })
     .join('\n\n');
 }
@@ -424,6 +441,9 @@ export function buildKpSystemPrompt({
   characters,
   retrievedChunks,
   worldbookEntries = [],
+  povCharacterId = '',
+  privateNotes = [],
+  roleAssignments = [],
   settings,
 }) {
   const chapters = module?.structure?.chapters || [];
@@ -439,6 +459,10 @@ export function buildKpSystemPrompt({
   const nextEntryScene = nextChapter?.scenes?.[0] || null;
   const narrativeMin = Math.max(50, Number(settings?.narrativeMin) || 200);
   const narrativeMax = Math.max(narrativeMin + 50, Number(settings?.narrativeMax) || 400);
+  const povCharacter = (characters || []).find((character) => character.id === povCharacterId);
+  const povAssignment =
+    povCharacter?.roleAssignment ||
+    (roleAssignments || []).find((assignment) => assignment.characterId === povCharacterId);
 
   return `你是《克苏鲁的呼唤》第七版（CoC 7e）的守秘人（Keeper, KP）。你正在主持模组《${module?.title || '未命名模组'}》。你必须严格依据下方提供的模组原文推进剧情，而不是自由创作。
 
@@ -473,8 +497,27 @@ ${
 【NPC 态度】
 ${formatNpcAttitudes(state) || '（暂无）'}
 
+【本场 HO 身份分配】
+${
+  (roleAssignments || []).length
+    ? roleAssignments
+        .map((assignment) => {
+          const character = (characters || []).find((item) => item.id === assignment.characterId);
+          return `- ${character?.name || assignment.characterId}：${assignment.code} · ${
+            assignment.title
+          }${assignment.publicInfo ? `——${assignment.publicInfo.slice(0, 300)}` : ''}`;
+        })
+        .join('\n')
+    : '（本场没有分配 HO 身份。）'
+}
+
+【玩家视角与信息隔离】
+用户只亲自扮演：${povCharacter?.name || '未指定'}${povAssignment ? `（${povAssignment.code} · ${povAssignment.title}）` : ''}。
+其余调查员由 AI 扮演。你只能向用户叙述 ${povCharacter?.name || '该角色'} 能亲眼看见、听见、推理出的信息；不得把其他角色未公开的秘密、内心想法或只有他们知道的模组信息直接写进叙事。其他 AI 角色的私密信息可能存在于行动上下文中，但只能通过可观察的行为暗示，不能直接揭晓。
+模组中的 HO 私密信息只属于对应角色；在公开叙事中不得点名泄露。
+
 【玩家调查员摘要】
-${formatCharacters(characters)}
+${formatCharacters(characters, { povCharacterId, privateNotes })}
 
 【本回合检索到的已解锁模组原文】
 ${formatChunks(retrievedChunks)}
@@ -482,6 +525,12 @@ ${formatChunks(retrievedChunks)}
 【世界书 / 历次跑团记录】
 ${formatWorldbook(worldbookEntries)}
 （世界书是过去发生过的事实与角色记忆，可作为连续性参考，但不能替代本模组原文，也不能用于提前泄露本模组未解锁内容。）
+
+【严格模组与结局】
+- 剧情必须来自本模组原文与已解锁场景；不得为了让所有人满意而改写关键事实。
+- 角色命运、结局与失败条件必须依据模组已写明的结局、已触发事件、已获得线索与角色行为判定。
+- 若模组没有写明的结局，只能给出“模组允许的开放收束”，不能自创与主题冲突的大团圆。
+- 结局可以由 KP 在最终回合宣告，但不得提前揭晓。
 
 【输出协议】
 ${KP_OUTPUT_PROTOCOL}
@@ -519,6 +568,10 @@ export function buildKpContext({
   characters,
   history = [],
   userInput = '',
+  userInputLabel = '【玩家行动】',
+  povCharacterId = '',
+  privateNotes = [],
+  roleAssignments = [],
   worldbook = [],
   settings = {},
 }) {
@@ -572,6 +625,9 @@ export function buildKpContext({
     characters,
     retrievedChunks,
     worldbookEntries,
+    povCharacterId,
+    privateNotes,
+    roleAssignments,
     settings,
   });
 
@@ -580,7 +636,10 @@ export function buildKpContext({
     ...recent,
   ];
   if (userInput && String(userInput).trim()) {
-    messages.push({ role: 'user', content: `【玩家行动】\n${String(userInput).trim()}` });
+    messages.push({
+      role: 'user',
+      content: `${userInputLabel}\n${String(userInput).trim()}`,
+    });
   }
 
   return {

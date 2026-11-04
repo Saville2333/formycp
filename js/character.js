@@ -741,8 +741,16 @@ export const AI_BUILD_JSON_SCHEMA = Object.freeze({
         required: ['name', 'occupation', 'interest'],
         properties: {
           name: { type: 'string' },
-          occupation: { type: 'integer', minimum: 0 },
-          interest: { type: 'integer', minimum: 0 },
+          occupation: {
+            type: 'integer',
+            minimum: 0,
+            description: '职业点目标值/权重；最终由前端按 EDU×2 总预算分配。',
+          },
+          interest: {
+            type: 'integer',
+            minimum: 0,
+            description: '兴趣点目标值/权重；最终由前端按 INT×2 总预算分配。',
+          },
         },
         additionalProperties: false,
       },
@@ -803,12 +811,11 @@ export function buildAutoCharacterMessages({ persona, occupationId, age }) {
 2. 年龄修正由程序完成，你不要在 attributes 中预先加减。当前年龄 ${age}，档位 ${ageBracket(age)}，修正为：
    STR ${modifier.str} / CON ${modifier.con} / DEX ${modifier.dex} / APP ${modifier.app} / EDU ${modifier.edu} / MOV ${modifier.mov}。
 3. 职业固定为「${occupation.name}」。本职技能只可使用：${occupation.skills.join('、') || '由 KP 自定义'}。
-4. 职业点为最终 EDU×2，兴趣点为最终 INT×2；信用评级必须位于 ${occupation.creditRange[0]}–${occupation.creditRange[1]}。
-5. skills 中只填写额外分配点（occupation / interest），不要填写基础值，也不要填写 total；程序会加上基础值并校验。
-6. 职业点只能分配给本职技能；兴趣点可以分配给任何合理技能。
-7. 技能总计不得超过 99。信用评级也要作为一项技能输出，occupation 点数至少等于信用评级。
-8. 必须把全部职业点和兴趣点分配完；不要虚报点数。
-9. 只输出 JSON，不要 Markdown 代码围栏，不要解释文本。JSON 结构：
+4. 程序会先计算总预算：职业点 = 最终 EDU×2，兴趣点 = 最终 INT×2。技能分配不需要你手工凑满；程序会从总额出发精确分配。
+5. skills 中的 occupation / interest 是“目标点数/相对权重”，不是最终校验值；程序会保留你的倾向，并在预算不足或超额时自动缩放、补齐。不要填写基础值或 total。
+6. 职业点只能分配给本职技能；兴趣点可以分配给任何合理技能。尽量列出 8–14 个与人设相关的技能，不要只列一两个。
+7. 技能总计不得超过 99。信用评级也要作为一项技能输出，程序会预留信用评级点数。
+8. 只输出 JSON，不要 Markdown 代码围栏，不要解释文本。JSON 结构：
 {
   "attributes": {"str":50,"con":55,"siz":60,"dex":50,"app":45,"int":65,"pow":55,"edu":70},
   "luck": 50,
@@ -855,14 +862,82 @@ export function parseAIBuildResponse(text) {
 }
 
 /**
- * 校验 AI 的原始属性与技能分配，并生成最终 build。
- * AI 只输出原始属性；年龄修正、基础值、HP/MP/SAN/MOV/DB/Build 在这里计算。
+ * 按总预算分配技能点：AI 输出的 occupation / interest 只作为相对权重，
+ * 程序从 EDU×2 / INT×2 的总额出发，精确分配，不再“先分再检测”。
  */
+function allocateWeightedPoints(budget, entries) {
+  const total = Math.max(0, Math.floor(Number(budget) || 0));
+  const pool = (entries || []).filter((entry) => entry.capacity > 0);
+  if (!pool.length) return total;
+  const totalWeight = pool.reduce((sum, entry) => sum + Math.max(0, entry.weight || 0), 0);
+  const weights = pool.map((entry) =>
+    totalWeight > 0 ? Math.max(0, entry.weight || 0) : 1
+  );
+  const sumWeight = weights.reduce((sum, weight) => sum + weight, 0) || pool.length;
+  let remaining = total;
+
+  // 优先保留 AI 的“目标点数”；不足总预算的部分再均匀补足，
+  // 避免因为 AI 只写了一个高兴趣技能，就把全部兴趣点灌到同一个技能上。
+  const baselineSum = pool.reduce(
+    (sum, entry) => sum + Math.min(entry.capacity, Math.max(0, entry.baseline || 0)),
+    0
+  );
+  if (baselineSum > 0) {
+    const scale = total < baselineSum ? total / baselineSum : 1;
+    for (const entry of pool) {
+      const points = Math.min(
+        entry.capacity,
+        Math.floor(Math.max(0, entry.baseline || 0) * scale)
+      );
+      entry.allocated = points;
+      remaining -= points;
+    }
+  } else {
+    const exact = pool.map((entry, index) => {
+      const value = (total * weights[index]) / sumWeight;
+      return { entry, value, fraction: value - Math.floor(value) };
+    });
+    for (const item of exact) {
+      const points = Math.min(item.entry.capacity, Math.floor(item.value));
+      item.entry.allocated = points;
+      remaining -= points;
+    }
+    exact.sort((a, b) => b.fraction - a.fraction || (b.entry.weight || 0) - (a.entry.weight || 0));
+    for (const item of exact) {
+      if (remaining <= 0) break;
+      if (item.entry.allocated < item.entry.capacity) {
+        item.entry.allocated += 1;
+        remaining -= 1;
+      }
+    }
+  }
+
+  // 仍有剩余时按权重循环补齐；每轮每个技能最多 +1，避免单点堆积。
+  const order = [...pool].sort(
+    (a, b) => Math.max(0, b.weight || 0) - Math.max(0, a.weight || 0)
+  );
+  let guard = 0;
+  while (remaining > 0 && guard < 10000) {
+    let progressed = false;
+    for (const entry of order) {
+      if (remaining <= 0) break;
+      if (entry.allocated < entry.capacity) {
+        entry.allocated += 1;
+        remaining -= 1;
+        progressed = true;
+      }
+    }
+    if (!progressed) break;
+    guard += 1;
+  }
+  return remaining;
+}
+
 export function validateAIBuild(payload, { occupationId, age }) {
   const errors = [];
+  const warnings = [];
   const occupation = getOccupation(occupationId);
   const rawAttributes = payload?.attributes || {};
-
   const rawRanges = {
     str: [15, 90],
     con: [15, 90],
@@ -880,7 +955,6 @@ export function validateAIBuild(payload, { occupationId, age }) {
       errors.push(`${key.toUpperCase()} 必须是 ${min}–${max} 之间、且为 5 的倍数的原始骰点。`);
     }
   }
-
   const luck = Number(payload?.luck);
   if (!Number.isInteger(luck) || luck < 15 || luck > 90 || luck % 5 !== 0) {
     errors.push('LUCK 必须是 15–90 之间、且为 5 的倍数的原始骰点。');
@@ -889,103 +963,137 @@ export function validateAIBuild(payload, { occupationId, age }) {
   const adjusted = applyAgeAdjustments(rawAttributes, age);
   const occupationBudget = adjusted.attributes.edu * 2;
   const interestBudget = adjusted.attributes.int * 2;
-  const aiSkills = Array.isArray(payload?.skills) ? payload.skills : [];
-  const occupationSkills = occupationSkillSet(occupation);
-  const seen = new Set();
-  let occupationSpent = 0;
-  let interestSpent = 0;
-  let creditFromSkill = null;
-
-  if (!aiSkills.length) errors.push('skills 不能为空。');
-
-  for (const rawSkill of aiSkills) {
+  const pool = new Map();
+  for (const skill of createSkillList(occupation.id, adjusted.attributes)) {
+    pool.set(skill.name, { ...skill });
+  }
+  const aiWeights = new Map();
+  for (const rawSkill of Array.isArray(payload?.skills) ? payload.skills : []) {
     const name = String(rawSkill?.name || '').trim();
-    if (!name) {
-      errors.push('技能名不能为空。');
+    if (!name) continue;
+    const occupationWeight = Math.max(0, Number(rawSkill.occupation) || 0);
+    const interestWeight = Math.max(0, Number(rawSkill.interest) || 0);
+    if (aiWeights.has(name)) {
+      const previous = aiWeights.get(name);
+      previous.occupation = Math.max(previous.occupation, occupationWeight);
+      previous.interest = Math.max(previous.interest, interestWeight);
       continue;
     }
-    if (seen.has(name)) {
-      errors.push(`技能「${name}」重复出现。`);
-      continue;
+    aiWeights.set(name, { occupation: occupationWeight, interest: interestWeight });
+    if (!pool.has(name)) {
+      pool.set(name, {
+        name,
+        base: baseSkillValue(name, adjusted.attributes),
+        occupation: 0,
+        interest: 0,
+        checked: false,
+      });
     }
-    seen.add(name);
-    const occupationPoints = Math.max(0, Math.floor(Number(rawSkill.occupation) || 0));
-    const interestPoints = Math.max(0, Math.floor(Number(rawSkill.interest) || 0));
-
-    if (!Number.isFinite(Number(rawSkill.occupation)) || !Number.isFinite(Number(rawSkill.interest))) {
-      errors.push(`技能「${name}」的点数必须是数字。`);
-    }
-    if (occupationPoints > 0 && occupation.id !== 'custom' && !occupationSkills.has(name)) {
-      errors.push(`「${name}」不是「${occupation.name}」的本职技能，不能分配职业点。`);
-    }
-    if (occupationPoints + interestPoints > 0) {
-      const total = baseSkillValue(name, adjusted.attributes) + occupationPoints + interestPoints;
-      if (total > 99) errors.push(`技能「${name}」总计 ${total} 超过 99。`);
-    }
-    occupationSpent += occupationPoints;
-    interestSpent += interestPoints;
-    if (name === '信用评级') creditFromSkill = occupationPoints || creditFromSkill;
   }
 
-  let creditRating = Number(payload?.creditRating);
-  if (!Number.isFinite(creditRating) && creditFromSkill !== null) creditRating = creditFromSkill;
-  if (
-    !Number.isInteger(creditRating) ||
-    creditRating < occupation.creditRange[0] ||
-    creditRating > occupation.creditRange[1]
-  ) {
-    errors.push(
-      `信用评级必须是 ${occupation.creditRange[0]}–${occupation.creditRange[1]} 之间的整数。`
-    );
+  // 信用评级是强制项：预留职业点，缺失时从范围中位数补足。
+  const creditMin = Number(occupation.creditRange?.[0] ?? 0);
+  const creditMax = Number(occupation.creditRange?.[1] ?? 99);
+  const creditFromSkill = aiWeights.get('信用评级')?.occupation;
+  let rawCredit = Number(payload?.creditRating);
+  if (!Number.isFinite(rawCredit) && Number.isFinite(creditFromSkill)) rawCredit = creditFromSkill;
+  if (!Number.isFinite(rawCredit)) {
+    rawCredit = Math.round((creditMin + creditMax) / 2);
+    warnings.push('AI 没有给出信用评级，已使用职业允许区间的中位数。');
   }
-  if (creditFromSkill !== null && creditFromSkill !== creditRating) {
-    errors.push('creditRating 与技能「信用评级」的数值必须一致。');
+  let creditRating = Math.round(rawCredit);
+  if (creditRating < creditMin || creditRating > creditMax) {
+    creditRating = Math.min(creditMax, Math.max(creditMin, creditRating));
+    warnings.push(`信用评级已调整到职业允许区间 ${creditMin}–${creditMax}。`);
+  }
+  const creditBase = pool.get('信用评级')?.base || 0;
+  creditRating = Math.max(0, Math.min(99 - creditBase, creditRating, occupationBudget));
+  if (!pool.has('信用评级')) {
+    pool.set('信用评级', {
+      name: '信用评级',
+      base: creditBase,
+      occupation: 0,
+      interest: 0,
+      checked: false,
+    });
+  }
+  const creditEntry = pool.get('信用评级');
+  creditEntry.occupationAllocated = creditRating;
+  const occupationRemaining = Math.max(0, occupationBudget - creditRating);
+
+  const occupationNames =
+    occupation.id === 'custom'
+      ? [...pool.keys()].filter((name) => name !== '信用评级')
+      : [...occupationSkillSet(occupation)].filter(
+          (name) => name !== '信用评级' && pool.has(name)
+        );
+  if (!occupationNames.length && occupationRemaining > 0) {
+    warnings.push('没有可分配的本职技能，职业点转入兴趣预算。');
+  }
+  for (const name of occupationNames) {
+    if (aiWeights.get(name)?.occupation > 0 || aiWeights.get(name)?.interest > 0) continue;
+    // 没有 AI 权重的本职技能保持 0，不强行摊平；全部为零时由分配器均分。
+  }
+  const occupationEntries = occupationNames.map((name) => {
+    const ai = aiWeights.get(name);
+    return {
+      name,
+      weight: (ai?.occupation || 0) + (ai?.interest ? ai.interest * 0.5 : 0) || 1,
+      baseline: ai?.occupation || 0,
+      capacity: Math.max(0, 99 - (pool.get(name)?.base || 0)),
+      allocated: 0,
+    };
+  });
+  const leftoverOccupation = allocateWeightedPoints(occupationRemaining, occupationEntries);
+  for (const entry of occupationEntries) {
+    const skill = pool.get(entry.name);
+    if (skill) skill.occupationAllocated = entry.allocated;
+  }
+  if (leftoverOccupation > 0) {
+    warnings.push(`职业点仍有 ${leftoverOccupation} 点无法分配（技能上限 99）。`);
   }
 
-  // 如果 AI 漏掉信用评级技能，则自动补入，并把它计入职业点。
-  if (!seen.has('信用评级') && Number.isFinite(creditRating)) {
-    aiSkills.push({ name: '信用评级', occupation: creditRating, interest: 0 });
-    occupationSpent += creditRating;
-    seen.add('信用评级');
+  const interestNames = [...pool.keys()].filter((name) => name !== '信用评级');
+  const interestEntries = interestNames.map((name) => {
+    const skill = pool.get(name);
+    const ai = aiWeights.get(name);
+    return {
+      name,
+      weight: ai?.interest || 0,
+      baseline: ai?.interest || 0,
+      capacity: Math.max(
+        0,
+        99 - (skill?.base || 0) - Math.max(0, skill?.occupationAllocated || 0)
+      ),
+      allocated: 0,
+    };
+  });
+  const leftoverInterest = allocateWeightedPoints(interestBudget, interestEntries);
+  for (const entry of interestEntries) {
+    const skill = pool.get(entry.name);
+    if (skill) skill.interestAllocated = entry.allocated;
+  }
+  if (leftoverInterest > 0) {
+    warnings.push(`兴趣点仍有 ${leftoverInterest} 点无法分配（技能上限 99）。`);
   }
 
-  if (occupationSpent > occupationBudget) {
-    errors.push(`职业点超额：${occupationSpent} / ${occupationBudget}。`);
-  }
-  if (interestSpent > interestBudget) {
-    errors.push(`兴趣点超额：${interestSpent} / ${interestBudget}。`);
-  }
+  const finalSkills = [...pool.values()].map((skill) =>
+    recalculateSkill({
+      name: skill.name,
+      base: skill.base,
+      occupation: Math.max(0, Math.floor(skill.occupationAllocated || 0)),
+      interest: Math.max(0, Math.floor(skill.interestAllocated || 0)),
+      checked: false,
+    })
+  );
+  const occupationSpent = finalSkills.reduce((sum, skill) => sum + skill.occupation, 0);
+  const interestSpent = finalSkills.reduce((sum, skill) => sum + skill.interest, 0);
   if (occupationSpent !== occupationBudget) {
-    errors.push(`职业点必须用满：${occupationSpent} / ${occupationBudget}。`);
+    warnings.push(`职业点 ${occupationSpent} / ${occupationBudget}，请检查技能上限。`);
   }
   if (interestSpent !== interestBudget) {
-    errors.push(`兴趣点必须用满：${interestSpent} / ${interestBudget}。`);
+    warnings.push(`兴趣点 ${interestSpent} / ${interestBudget}，请检查技能上限。`);
   }
-
-  const finalSkills = [
-    ...new Map(
-      [
-        ...createSkillList(occupation.id, adjusted.attributes),
-        ...aiSkills.map((skill) => ({
-          name: String(skill.name).trim(),
-          base: baseSkillValue(String(skill.name).trim(), adjusted.attributes),
-          occupation: Math.max(0, Math.floor(Number(skill.occupation) || 0)),
-          interest: Math.max(0, Math.floor(Number(skill.interest) || 0)),
-          checked: false,
-        })),
-      ].map((skill) => {
-        const ai = aiSkills.find((item) => String(item.name).trim() === skill.name);
-        return [
-          skill.name,
-          recalculateSkill({
-            ...skill,
-            occupation: ai ? Math.max(0, Math.floor(Number(ai.occupation) || 0)) : 0,
-            interest: ai ? Math.max(0, Math.floor(Number(ai.interest) || 0)) : 0,
-          }),
-        ];
-      })
-    ).values(),
-  ];
 
   const build = {
     occupationId: occupation.id,
@@ -993,16 +1101,16 @@ export function validateAIBuild(payload, { occupationId, age }) {
     attributes: adjusted.attributes,
     rawAttributes: { ...rawAttributes },
     luck,
-    creditRating: Number.isInteger(creditRating) ? creditRating : 0,
+    creditRating,
     skills: finalSkills,
   };
-
   const ruleCheck = validateBuild(build);
   const allErrors = [...new Set([...errors, ...ruleCheck.errors])];
+  const allWarnings = [...new Set([...warnings, ...ruleCheck.warnings])];
   return {
     valid: allErrors.length === 0,
     errors: allErrors,
-    warnings: ruleCheck.warnings,
+    warnings: allWarnings,
     build: {
       ...build,
       derived: adjusted.attributes ? calculateDerived(adjusted.attributes, age) : null,
@@ -1013,8 +1121,15 @@ export function validateAIBuild(payload, { occupationId, age }) {
       interestBudget,
       occupationSpent,
       interestSpent,
+      occupationRemaining: Math.max(0, occupationBudget - occupationSpent),
+      interestRemaining: Math.max(0, interestBudget - interestSpent),
     },
     occupation,
+    allocation: {
+      creditRating,
+      occupationWeights: occupationEntries,
+      interestWeights: interestEntries,
+    },
   };
 }
 
@@ -1061,7 +1176,7 @@ export async function generateCharacterWithAI({
         role: 'user',
         content: `这份 JSON 未通过前端规则校验，请修正后重新输出完整 JSON。错误：\n- ${lastErrors.join(
           '\n- '
-        )}\n注意：属性必须是年龄修正前的原始骰点；职业点/兴趣点必须用满；信用评级必须包含在 skills 中并计入职业点。`,
+        )}\n注意：属性必须是年龄修正前的原始骰点；技能 occupation/interest 只作为目标点数/权重，程序会按总预算精确分配；请列出 8–14 个与人设相关的技能，并包含信用评级。`,
       }
     );
   }

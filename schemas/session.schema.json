@@ -34,6 +34,61 @@
       "type": "array",
       "items": { "type": "string", "maxLength": 80 }
     },
+    "povCharacterId": {
+      "type": "string",
+      "maxLength": 80,
+      "description": "玩家亲自扮演的调查员；其余 PL 由 AI 扮演。"
+    },
+    "roleAssignments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["roleId", "characterId", "code", "title"],
+        "properties": {
+          "roleId": { "type": "string", "maxLength": 80 },
+          "characterId": { "type": "string", "maxLength": 80 },
+          "code": { "type": "string", "maxLength": 40 },
+          "title": { "type": "string", "maxLength": 300 },
+          "summary": { "type": "string", "maxLength": 2000 },
+          "publicInfo": { "type": "string", "maxLength": 8000 },
+          "privateInfo": { "type": "string", "maxLength": 16000 },
+          "persona": { "type": "string", "maxLength": 24000 },
+          "goals": { "type": "array", "items": { "type": "string", "maxLength": 500 } },
+          "ending": { "type": "string", "maxLength": 8000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "privateNotes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "characterId", "content"],
+        "properties": {
+          "id": { "type": "string", "maxLength": 80 },
+          "characterId": { "type": "string", "maxLength": 80 },
+          "roleId": { "type": "string", "maxLength": 80 },
+          "title": { "type": "string", "maxLength": 300 },
+          "content": { "type": "string", "maxLength": 16000 },
+          "source": { "enum": ["role", "keeper", "clue", "manual"] },
+          "visibility": { "const": "private" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "openingPending": { "type": "boolean" },
+    "memoryChoice": { "enum": ["", "engrave", "discard"] },
+    "ending": {
+      "type": ["object", "null"],
+      "properties": {
+        "title": { "type": "string", "maxLength": 300 },
+        "text": { "type": "string", "maxLength": 4000 },
+        "povFate": { "type": "string", "maxLength": 1000 },
+        "at": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
     "activeChapterId": { "type": "string", "maxLength": 80 },
     "activeSceneId": { "type": "string", "maxLength": 80 },
     "kpState": {

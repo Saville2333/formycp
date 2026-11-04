@@ -107,6 +107,8 @@ Module
 │             revealCondition }
 ├── npcs[]  { id, name, role, attitude, description, secrets, sceneIds[] }
 ├── events[] { id, title, mustTrigger, triggerCondition, triggered }
+├── roles[] { id, code: HO1, title, summary, publicInfo, privateInfo,
+│             persona, goals[], ending }
 ├── retrieval { method: keyword|tfidf|hybrid, index{term: chunkId[]} }
 ├── aiAudit { verdict, summary, warnings[], keyClues[], mustTriggerEvents[],
 │             sceneIssues[], provider, model, checkedAt, truncated }
@@ -120,6 +122,7 @@ Module
 3. `mustTrigger` 的事件进入 KP 状态机；触发后写回 `triggered`。
 4. `source.rawText` 允许保留完整原文，作为最终事实来源。
 5. `aiAudit` 只接受与现有线索/事件/场景标题精确匹配的建议；模型不能凭空新增模组内容。
+6. `roles` 从 `HO1：将死之人`、`角色：HO2 长生之人` 等标题解析；`公开信息` / `秘密` / `人设` / `目标` / `结局` 标签会拆成独立字段。
 
 ## 4. 会话/战役 `session.schema.json`
 
@@ -129,6 +132,11 @@ Module
 Session
 ├── title / status(setup|active|paused|completed)
 ├── moduleId + playerCharacterIds[] + npcIds[] + chatIds[]
+├── povCharacterId：玩家亲自扮演的调查员
+├── roleAssignments[] { roleId, characterId, code, title, publicInfo,
+│                       privateInfo, persona, goals[], ending }
+├── privateNotes[] { characterId, roleId, title, content, visibility: private }
+├── openingPending / memoryChoice(engrave|discard) / ending
 ├── activeChapterId / activeSceneId
 ├── kpState
 │   ├── currentChapterId / currentSceneId
@@ -144,6 +152,8 @@ Session
 ```
 
 KP 状态每回合由模型输出结构化增量，再由前端合并；前端是最终状态权威，不直接信任模型重写整份状态。
+
+`povCharacterId` 决定信息边界：KP 提示词只注入 POV 的 `privateNotes`；AI 角色的私密信息只进入其自己的 AI 代演提示词，且要求只能通过可观察行为暗示。`privateNotes` 不写入世界书，也不在 POV 界面之外渲染。
 
 ## 5. 聊天记录 `chat.schema.json`
 
