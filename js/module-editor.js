@@ -15,10 +15,30 @@ export const MODULE_EDITOR_SYSTEM_PROMPT = `你是《克苏鲁的呼唤》第七
 1. 只输出完整修订后的模组 Markdown 原文，放在一个 \`\`\`markdown 代码块中；代码块外不要写解释、前言、总结或道歉。
 2. 除用户明确要求修改的内容外，逐字保留原文；不要擅自改写剧情事实、HO 秘密、线索、NPC、结局。
 3. 保留 Markdown 标题层级：章节用 #，场景用 ##，线索/NPC/事件/HO 用 ### 或 ##。
-4. 保留 HO 身份格式：HO1：标题、HO2：标题，以及“公开信息/秘密/人设/目标/结局”标签。
-5. 如果用户要求补充内容，必须写成可直接使用的模组正文，不要只给建议。
-6. 如果用户要求删除或合并内容，返回删除后的完整文本，不要保留省略号。
-7. 不得泄露现实世界隐私，不得输出与模组编辑无关的内容。`;
+4. 必须主动识别 HO / PC 身份：即使原文没有 HO 标题，只要用户消息或原文中出现“HO1/ HO2 / 将死之人 / 长生之人 / 身份 / 角色分配”等信息，就要在正文中补出可被程序解析的 HO 段：
+   \`\`\`markdown
+   # 角色
+   ## HO1：将死之人
+   公开信息：……
+   秘密：……
+   人设：……
+   目标：……
+   结局：……
+   \`\`\`
+   不得只在聊天里回答“我检测到了”，必须写进返回的完整正文。
+5. 如果用户说“HO 没检测出来”“我给出 HO”，必须重新扫描全文和用户给出的身份描述，补全 HO 标题、公开信息、秘密、人设、目标、结局。
+6. 如果用户要求补充内容，必须写成可直接使用的模组正文，不要只给建议。
+7. 如果用户要求删除或合并内容，返回删除后的完整文本，不要保留省略号。
+8. 不得泄露现实世界隐私，不得输出与模组编辑无关的内容。`;
+
+export function requestedHOCodes(text) {
+  const codes = [];
+  for (const match of String(text || '').matchAll(/\bHO\s*(\d+)\b/gi)) {
+    const code = `HO${match[1]}`;
+    if (!codes.includes(code)) codes.push(code);
+  }
+  return codes;
+}
 
 export function buildModuleEditMessages({ text, title = '', request = '' }) {
   return [
@@ -117,6 +137,7 @@ export async function editModuleWithAI({
 export const moduleEditor = Object.freeze({
   MAX_EDIT_CHARS,
   MODULE_EDITOR_SYSTEM_PROMPT,
+  requestedHOCodes,
   buildModuleEditMessages,
   extractEditedModuleText,
   editModuleWithAI,

@@ -17,7 +17,11 @@ import {
 } from '../module.js';
 import { createInitialKpState } from '../kp.js';
 import { auditModuleWithAI } from '../module-audit.js';
-import { editModuleWithAI, MAX_EDIT_CHARS } from '../module-editor.js';
+import {
+  editModuleWithAI,
+  requestedHOCodes,
+  MAX_EDIT_CHARS,
+} from '../module-editor.js';
 import {
   escapeHTML,
   icon,
@@ -297,31 +301,92 @@ function openModuleStudio({ text, fileName = '', title = '' }, ctx) {
         setBusy(true);
         const progress = addChat('system', 'KP 正在阅读全文并准备修订，长模组可能需要一会儿……');
         try {
+          const titleForEdit = titleInput.value.trim() || initialTitle;
           const result = await editModuleWithAI({
             profile,
             text: source.value,
-            title: titleInput.value.trim() || initialTitle,
+            title: titleForEdit,
             request,
           });
-          const nextParsed = parseModuleFile({
-            text: result.text,
+          let finalText = result.text;
+          let finalParsed = parseModuleFile({
+            text: finalText,
             fileName,
-            title: titleInput.value.trim() || initialTitle,
+            title: titleForEdit,
           });
+          const requestedCodes = requestedHOCodes(request);
+          const missingCodes = () => {
+            const present = new Set(
+              (finalParsed.roles || []).map((role) =>
+                String(role.code || '').replace(/\s+/g, '').toUpperCase()
+              )
+            );
+            return requestedCodes.filter((code) => !present.has(code));
+          };
+          const hasNoRoles = !(finalParsed.roles || []).length;
+          const mentionedRoles =
+            requestedCodes.length > 0 || /HO|身份|角色分配|将死之人|长生之人/i.test(request);
+          if ((requestedCodes.length && missingCodes().length) || (hasNoRoles && mentionedRoles)) {
+            addChat(
+              'system',
+              '本轮修订没有检测到完整的 HO 身份，正在让 KP 重新扫描全文并补全 HO 段落……'
+            );
+            try {
+              const repairRequest = `${request}\n\n【HO 补全要求】当前正文没有检测到${requestedCodes.length ? ` ${requestedCodes.join('、')} ` : ' HO 身份'}。请重新扫描全文和上面的要求，保留其他内容，补出 # 角色 下的 HO 标题，并写全“公开信息/秘密/人设/目标/结局”。必须把 HO 写进返回的完整正文，不能只在对话里说明。`;
+              const repaired = await editModuleWithAI({
+                profile,
+                text: finalText,
+                title: titleForEdit,
+                request: repairRequest,
+              });
+              const repairedParsed = parseModuleFile({
+                text: repaired.text,
+                fileName,
+                title: titleForEdit,
+              });
+              const repairedCodes = new Set(
+                (repairedParsed.roles || []).map((role) =>
+                  String(role.code || '').replace(/\s+/g, '').toUpperCase()
+                )
+              );
+              const stillMissing = requestedCodes.filter((code) => !repairedCodes.has(code));
+              if (
+                (repairedParsed.roles || []).length > (finalParsed.roles || []).length ||
+                stillMissing.length < missingCodes().length
+              ) {
+                finalText = repaired.text;
+                finalParsed = repairedParsed;
+              }
+            } catch (repairError) {
+              addChat(
+                'system',
+                `HO 补全尝试未成功：${repairError.message}。当前采用第一次修订结果。`,
+                'studio-chat__item--error'
+              );
+            }
+          }
           undoStack.push(source.value);
-          currentText = result.text;
+          currentText = finalText;
           source.value = currentText;
           dirty = true;
-          if (titleInput.value.trim() === initialTitle && nextParsed.title) {
-            titleInput.value = nextParsed.title;
+          if (titleInput.value.trim() === initialTitle && finalParsed.title) {
+            titleInput.value = finalParsed.title;
           }
-          updateStats(nextParsed);
+          updateStats(finalParsed);
           progress.remove();
+          const finalStats = moduleStats(finalParsed);
+          const missingAfter = missingCodes();
           addChat(
             'kp',
-            `已按你的要求修订正文，并重新解析为 ${moduleStats(nextParsed).chapters} 章 / ${
-              moduleStats(nextParsed).scenes
-            } 场景 / ${moduleStats(nextParsed).roles || 0} 个 HO。确认后点击「保存模组」；如果改坏了，可以撤销或恢复原文。`
+            `已按你的要求修订正文，并重新解析为 ${finalStats.chapters} 章 / ${
+              finalStats.scenes
+            } 场景 / ${finalStats.roles || 0} 个 HO。${
+              missingAfter.length
+                ? `仍未检测到 ${missingAfter.join('、')}，请检查 HO 标题是否完整。`
+                : finalStats.roles
+                  ? 'HO 已写入正文。'
+                  : ''
+            }确认后点击「保存模组」；如果改坏了，可以撤销或恢复原文。`
           );
         } catch (error) {
           progress.remove();

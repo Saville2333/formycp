@@ -320,7 +320,7 @@ const ROLE_FIELD_LABELS = [
 ];
 
 function matchRoleField(line) {
-  const cleaned = stripMarkdown(line).trim();
+  const cleaned = stripMarkdown(line).replace(/^[-*•]\s*/, '').trim();
   for (const field of ROLE_FIELD_LABELS) {
     if (field.regex.test(cleaned)) {
       return { key: field.key, value: cleaned.replace(field.regex, '').trim() };
@@ -389,10 +389,69 @@ function extractRoles(root) {
   return { roles, nodes };
 }
 
+const RAW_ROLE_LINE =
+  /^(?:#{1,6}\s*)?(?:[-*•]\s*)?(?:\*\*|【|\[)?\s*(HO\s*\d+|PC\s*\d+)\s*(?:\*\*|】|\])?\s*(?:[：:、.\-—–]\s*)?(.+?)\s*$/i;
+
+/**
+ * 兼容 AI/作者没用标题写 HO 的情况：
+ * `HO1：将死之人`、`**HO2 长生之人**`、`- HO1 将死之人` 都能识别。
+ */
+function extractRolesFromLines(text) {
+  const lines = normalizeNewlines(text).split('\n');
+  const matches = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const cleaned = stripMarkdown(lines[index]).trim();
+    const matched = cleaned.match(RAW_ROLE_LINE);
+    if (matched) {
+      matches.push({ index, code: matched[1].replace(/\s+/g, '').toUpperCase(), title: matched[2].trim() });
+    }
+  }
+  const roles = [];
+  for (let i = 0; i < matches.length; i += 1) {
+    const match = matches[i];
+    if (roles.some((role) => role.code === match.code)) continue;
+    const next = matches[i + 1]?.index ?? lines.length;
+    let end = next;
+    for (let j = match.index + 1; j < next; j += 1) {
+      if (/^#{1,6}\s+/.test(lines[j].trim())) {
+        end = j;
+        break;
+      }
+    }
+    const body = lines.slice(match.index + 1, end).join('\n').trim();
+    const fields = parseRoleFields(body);
+    const publicInfo = sliceText(fields.publicInfo || body, fields.publicInfo ? 4000 : 600);
+    roles.push({
+      id: createId('role', i + 1),
+      code: match.code,
+      title: match.title || '未命名身份',
+      summary: sliceText(publicInfo || match.title, 220),
+      publicInfo,
+      privateInfo: sliceText(fields.privateInfo || body, 16000),
+      persona: sliceText(fields.persona || body, 12000),
+      goals: fields.goals || [],
+      ending: sliceText(fields.ending || '', 4000),
+      description: sliceText(body || match.title, 24000),
+    });
+  }
+  return roles;
+}
+
+function mergeRoleLists(primary, extra) {
+  const list = [...(primary || [])];
+  for (const role of extra || []) {
+    if (list.some((item) => item.code === role.code || item.title === role.title)) continue;
+    list.push(role);
+  }
+  return list;
+}
+
 /** 兼容旧模组：没有 roles 字段时，从 rawText 重新扫描 HO 标题。 */
 export function parseRolesFromText(text) {
   if (!String(text || '').trim()) return [];
-  return extractRoles(parseHeadingTree(normalizeNewlines(text))).roles;
+  const normalized = normalizeNewlines(text);
+  const headingRoles = extractRoles(parseHeadingTree(normalized)).roles;
+  return mergeRoleLists(headingRoles, extractRolesFromLines(normalized));
 }
 
 function buildFromTree(root, { title, fileName, type }) {
@@ -699,6 +758,7 @@ export function parseModuleFile({ text, fileName = '', title = '' } = {}) {
     type,
   });
   module.source.rawText = source;
+  module.roles = mergeRoleLists(module.roles, extractRolesFromLines(source));
   return buildRetrievalIndex(module);
 }
 
