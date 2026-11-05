@@ -15,9 +15,10 @@ export const KP_STATE_END = '[[/KP_STATE]]';
 
 export const KP_OUTPUT_PROTOCOL = `叙事结束后，必须另起一行输出隐藏状态块，格式严格如下（不要放进 Markdown 代码围栏）：
 ${KP_STATE_START}
-{"currentChapterId":"当前章节 ID 或 null","currentSceneId":"当前场景 ID 或 null","visitedSceneIds":[],"discoveredClueIds":[],"triggeredEventIds":[],"npcAttitudes":{"npc_id":{"attitude":"态度","notes":"备注"}},"timeline":[{"inGameTime":"模组内时间","summary":"发生了什么"}],"unlockedContent":{"chapterIds":[],"sceneIds":[],"clueIds":[]},"flags":{},"lastKeeperSummary":"给下一回合自己的简短摘要"}
+{"currentChapterId":"当前章节 ID 或 null","currentSceneId":"当前场景 ID 或 null","visitedSceneIds":[],"discoveredClueIds":[],"triggeredEventIds":[],"npcAttitudes":{"npc_id":{"attitude":"态度","notes":"备注"}},"timeline":[{"inGameTime":"模组内时间","summary":"发生了什么"}],"unlockedContent":{"chapterIds":[],"sceneIds":[],"clueIds":[]},"flags":{},"lastKeeperSummary":"给下一回合自己的简短摘要","nextHint":"给玩家的一句话下一步提示，不超过40字；没有明确方向则填空字符串"}
 ${KP_STATE_END}
-状态块会由程序剥离，绝不能向玩家展示，也不能在叙事中提及“状态块”“系统提示”或“模组片段”。`;
+状态块会由程序剥离，绝不能向玩家展示，也不能在叙事中提及“状态块”“系统提示”或“模组片段”。
+nextHint 是可选按钮内容：只写一句不超过 40 字、对玩家视角角色可执行的下一步提示，不剧透秘密、不替玩家决定；没有明确方向时填空字符串。`;
 
 export function createInitialKpState(module) {
   const chapters = module?.structure?.chapters || [];
@@ -46,6 +47,7 @@ export function createInitialKpState(module) {
     },
     flags: {},
     lastKeeperSummary: '',
+    nextHint: '',
   };
 }
 
@@ -134,6 +136,7 @@ export function normalizeKpState(input, module) {
     },
     flags,
     lastKeeperSummary: typeof state.lastKeeperSummary === 'string' ? state.lastKeeperSummary : '',
+    nextHint: typeof state.nextHint === 'string' ? state.nextHint.slice(0, 120) : '',
   };
 }
 
@@ -328,6 +331,8 @@ export function mergeKpState(currentState, patch, module) {
         typeof patch.lastKeeperSummary === 'string'
           ? patch.lastKeeperSummary
           : state.lastKeeperSummary,
+      // 每次回复都由 KP 给一句可选提示；没有给就清空，避免按钮显示旧提示。
+      nextHint: typeof patch.nextHint === 'string' ? patch.nextHint.slice(0, 120) : '',
     },
     warnings,
   };

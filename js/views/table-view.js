@@ -372,6 +372,7 @@ function renderTable() {
   const state = campaign.kpState || {};
   const currentScene = findScene(moduleData, state.currentSceneId)?.scene;
   const messages = chat?.messages || [];
+  const pendingTurn = pendingTurnMessages();
   const profileLabel = currentProfile
     ? `${currentProfile.name} · ${currentProfile.model || '未填写模型'}`
     : '未配置接口';
@@ -567,6 +568,16 @@ function renderTable() {
         }
         ${sceneIntro}
         ${messages.map(messageMarkup).join('')}
+        ${
+          campaign.kpState?.nextHint
+            ? `<div class="next-hint">
+                <button class="btn btn--ghost btn--sm next-hint__button" type="button" data-action="show-next-hint" aria-expanded="false">${icon(
+                  'spark'
+                )} 下一步提示</button>
+                <p class="next-hint__text" hidden>${escapeHTML(campaign.kpState.nextHint)}</p>
+              </div>`
+            : ''
+        }
       </div>
 
       <div class="chat-composer">
@@ -588,17 +599,17 @@ function renderTable() {
             )} 掷骰</button>
           </div>
           <div class="dice-tools__row">
-            <select class="form-input" id="check-skill" aria-label="检定技能">${skillOptions(
-              selectedCharacter()
+            <select class="form-input" id="check-skill" aria-label="你要过的检定技能">${skillOptions(
+              povCharacter()
             )}</select>
             <select class="form-input" id="check-difficulty" aria-label="检定难度">
               <option value="regular">常规</option>
               <option value="hard">困难</option>
               <option value="extreme">极难</option>
             </select>
-            <button class="btn btn--ghost btn--sm" type="button" data-action="quick-check">${icon(
+            <button class="btn btn--gold btn--sm" type="button" data-action="quick-check">${icon(
               'dice'
-            )} 检定</button>
+            )} 自动投骰</button>
             <button class="btn btn--ghost btn--sm" type="button" data-action="quick-san">SAN</button>
             <button class="btn btn--ghost btn--sm" type="button" data-action="show-command-help">/ 命令</button>
           </div>
@@ -607,17 +618,23 @@ function renderTable() {
           <textarea class="composer__input" id="chat-input" rows="3" placeholder="描述你的行动，或使用 /r /c /san /luck 命令……" ${
             sending || actorBusy ? 'disabled' : ''
           }></textarea>
+          <div class="pending-turn" data-pending-bar ${pendingTurn.length ? '' : 'hidden'}>
+            <span>${icon('scroll')} 待回复 KP：<strong data-pending-count>${pendingTurn.length}</strong> 条行动 / 骰子</span>
+            <button class="btn btn--primary btn--sm" type="button" data-action="reply-kp" ${
+              sending || actorBusy || !pendingTurn.length ? 'disabled' : ''
+            }>${icon('arrow-right')} 回复给 KP</button>
+          </div>
           <div class="composer__bar">
-            <span class="composer__hint">ENTER 发送 · SHIFT+ENTER 换行 · AI 同伴：≤100字并自动检定</span>
+            <span class="composer__hint">ENTER 加入待回复 · 先投骰 / AI 同伴行动 · 最后按「回复给 KP」</span>
             <div class="composer__actions">
               <button class="btn btn--gold btn--sm" type="button" data-action="ai-actor" data-character-id="${escapeHTML(
                 ais[0]?.id || ''
               )}" ${!currentProfile || sending || actorBusy || !ais.length ? 'disabled' : ''}>${icon(
                 'spark'
               )} ${actorBusy ? '代演中…' : `AI 同伴行动${ais[0] ? ` · ${escapeHTML(ais[0].name)}` : ''}`}</button>
-              <button class="btn btn--primary composer__send" type="button" data-action="send-message" ${
+              <button class="btn btn--ghost composer__send" type="button" data-action="send-message" ${
                 sending || actorBusy ? 'disabled' : ''
-              }>${icon('arrow-right')} 发送</button>
+              }>${icon('plus')} 加入行动</button>
             </div>
           </div>
         </div>
@@ -693,6 +710,7 @@ async function addDiceMessage(content, diceMeta, hidden = false) {
   });
   appendMessageDom(message);
   await persistChat();
+  updatePendingUi();
   return message;
 }
 
@@ -722,7 +740,7 @@ async function rollFromTools(ctx) {
 }
 
 async function quickCheckFromTools() {
-  const character = selectedCharacter();
+  const character = povCharacter();
   if (!character) return toast('请先选择一位调查员。', { type: 'warning' });
   const skillName = document.getElementById('check-skill')?.value || '侦查';
   const difficulty = document.getElementById('check-difficulty')?.value || 'regular';
@@ -740,10 +758,14 @@ async function quickCheckFromTools() {
     meta,
     options.hidden
   );
+  toast(`${character.name} 的「${skillName}」已自动投骰并加入待回复。`, {
+    type: 'info',
+    duration: 3000,
+  });
 }
 
 async function quickSanFromTools() {
-  const character = selectedCharacter();
+  const character = povCharacter();
   if (!character) return toast('请先选择一位调查员。', { type: 'warning' });
   const loss = window.prompt('SAN 损失表达式（成功/失败）', '1/1d6');
   if (!loss) return;
@@ -790,28 +812,36 @@ function setSendingUi(value) {
       existing.remove();
     }
   }
+  updatePendingUi();
 }
 
-async function recordTurnLog(userMessage, assistant) {
+async function recordTurnLog(turnMessages, assistant) {
   if (!campaign) return;
   try {
     const scene = findScene(moduleData, campaign.kpState?.currentSceneId)?.scene;
-    const userIndex = userMessage?.id
-      ? chat.messages.findIndex((message) => message.id === userMessage.id)
-      : chat.messages.length;
-    const priorUserIndex = chat.messages
-      .slice(0, Math.max(0, userIndex))
-      .map((message) => message.role)
-      .lastIndexOf('user');
-    const turnSlice = chat.messages.slice(priorUserIndex + 1, userIndex);
-    const recentDice = [...turnSlice].reverse().find((message) => message.role === 'dice');
+    const messages = Array.isArray(turnMessages) ? turnMessages : [];
     const content = [
-      userMessage ? `【${userMessage.speaker || '调查员'}】${userMessage.content}` : '【KP 开场】',
-      recentDice ? `【骰子】${recentDice.content}` : '',
+      messages.length
+        ? messages
+            .map((message) =>
+              message.role === 'dice'
+                ? `【骰子】${message.content}`
+                : `【${message.speaker || '调查员'}】${message.content}`
+            )
+            .join('\n\n')
+        : '【KP 开场】',
       `【KP】${assistant.content}`,
     ]
       .filter(Boolean)
       .join('\n\n');
+    const characterIds = [
+      ...new Set(
+        messages.map((message) => message.meta?.characterId).filter(Boolean)
+      ),
+    ];
+    const speakers = [
+      ...new Set(messages.map((message) => message.speaker).filter(Boolean)),
+    ];
     const entry = await storage.worldbook.save({
       campaignId: campaign.id,
       moduleId: campaign.moduleId,
@@ -819,8 +849,10 @@ async function recordTurnLog(userMessage, assistant) {
       type: 'log',
       title: `${scene?.title || '场景'} · ${new Date().toLocaleString('zh-CN')}`,
       content,
-      tags: [scene?.title, campaign.title, userMessage?.speaker || 'KP 开场'].filter(Boolean),
-      characterIds: [selectedCharacterId].filter(Boolean),
+      tags: [scene?.title, campaign.title, ...speakers].filter(Boolean),
+      characterIds: characterIds.length
+        ? characterIds
+        : [campaign.povCharacterId].filter(Boolean),
       sceneId: campaign.kpState?.currentSceneId || '',
       source: 'turn',
       importance: 1,
@@ -830,6 +862,33 @@ async function recordTurnLog(userMessage, assistant) {
   } catch (error) {
     console.warn('[Cthulhu Table] 跑团日志写入世界书失败：', error);
   }
+}
+
+function pendingTurnMessages() {
+  if (!chat?.messages?.length) return [];
+  let lastAssistant = -1;
+  chat.messages.forEach((message, index) => {
+    if (message.role === 'assistant') lastAssistant = index;
+  });
+  return chat.messages
+    .slice(lastAssistant + 1)
+    .filter((message) => ['user', 'dice'].includes(message.role));
+}
+
+function formatPendingMessage(message) {
+  if (message.role === 'dice') return `【骰子】${message.content}`;
+  return `【${message.speaker || '调查员'}】${message.content}`;
+}
+
+function updatePendingUi() {
+  const pending = pendingTurnMessages();
+  const bar = document.querySelector('[data-pending-bar]');
+  if (!bar) return;
+  bar.hidden = pending.length === 0;
+  const count = bar.querySelector('[data-pending-count]');
+  if (count) count.textContent = String(pending.length);
+  const button = bar.querySelector('[data-action="reply-kp"]');
+  if (button) button.disabled = sending || actorBusy || pending.length === 0;
 }
 
 async function openCampaignScene(ctx, { auto = false } = {}) {
@@ -848,21 +907,31 @@ async function openCampaignScene(ctx, { auto = false } = {}) {
   }
   campaign.openingPending = true;
   storage.campaigns.save(campaign);
-  await runKpTurn(null, ctx, { opening: true });
+  await runKpTurn(ctx, { opening: true });
 }
 
-async function runKpTurn(userMessage, ctx, { opening = false } = {}) {
+async function runKpTurn(ctx, { opening = false, pendingMessages = null } = {}) {
   if (!currentProfile) {
     toast('尚未配置 AI 接口，无法请求守秘人。', { type: 'error', duration: 6000 });
     return;
   }
   if (!campaign || !moduleData) return;
   if (sending) return;
-  if (!opening && !userMessage) return;
+  const pending = opening ? [] : pendingMessages || pendingTurnMessages();
+  if (!opening && !pending.length) {
+    toast('还没有待回复的行动或骰子。', { type: 'info' });
+    return;
+  }
 
   const openingInput =
     '【战役开场】请严格依据本模组的第一幕/第一场景开场。建立可感知的环境、氛围与第一条可调查线索；不要替玩家做决定，不要泄露未解锁内容或其他角色的私密信息。';
-  const history = opening ? chat.messages.slice() : chat.messages.slice(0, -1);
+  const firstPendingIndex = pending.length
+    ? chat.messages.findIndex((message) => message.id === pending[0].id)
+    : chat.messages.length;
+  const history = opening
+    ? chat.messages.slice()
+    : chat.messages.slice(0, firstPendingIndex >= 0 ? firstPendingIndex : chat.messages.length);
+  const pendingInput = pending.map(formatPendingMessage).join('\n\n');
   const context = buildKpContext({
     module: moduleData,
     state: campaign.kpState,
@@ -871,8 +940,8 @@ async function runKpTurn(userMessage, ctx, { opening = false } = {}) {
     privateNotes: campaign.privateNotes || [],
     roleAssignments: campaign.roleAssignments || [],
     history,
-    userInput: opening ? openingInput : userMessage.content,
-    userInputLabel: opening ? '【战役开场】' : '【玩家行动】',
+    userInput: opening ? openingInput : pendingInput,
+    userInputLabel: opening ? '【战役开场】' : '【本轮行动与骰子】',
     worldbook: worldbookEntries,
     settings: storage.settings.get().kp,
   });
@@ -956,7 +1025,7 @@ async function runKpTurn(userMessage, ctx, { opening = false } = {}) {
       campaign.openingPending = false;
       storage.campaigns.save(campaign);
     }
-    await recordTurnLog(opening ? null : userMessage, assistant);
+    await recordTurnLog(opening ? null : pending, assistant);
     // 重绘桌面，让场景标题、进度与线索面板与本回合状态同步。
     ctx?.refresh?.();
   } catch (error) {
@@ -986,6 +1055,7 @@ function setActorBusy(value) {
   });
   const input = document.getElementById('chat-input');
   if (input) input.disabled = value || sending;
+  updatePendingUi();
 }
 
 async function runActorTurn(ctx, characterId = '') {
@@ -1042,7 +1112,12 @@ async function runActorTurn(ctx, characterId = '') {
     appendMessageDom(message);
     await persistChat();
     setActorBusy(false);
-    await runKpTurn(message, ctx);
+    updatePendingUi();
+    scrollChat();
+    toast(`已加入待回复：${character.name} 行动 + 自动检定。按下「回复给 KP」统一发送。`, {
+      type: 'info',
+      duration: 4000,
+    });
   } catch (error) {
     toast(`AI 代演失败：${error.message}`, { type: 'error', duration: 7000 });
   } finally {
@@ -1060,10 +1135,6 @@ async function sendMessage(ctx) {
     await handleCommand(text, ctx);
     return;
   }
-  if (!currentProfile) {
-    toast('请先在设置中配置 AI 接口，再向守秘人发送行动。', { type: 'error', duration: 6000 });
-    return;
-  }
   const character = povCharacter();
   const message = addMessage(
     'user',
@@ -1074,13 +1145,28 @@ async function sendMessage(ctx) {
   input.value = '';
   appendMessageDom(message);
   await persistChat();
-  await runKpTurn(message, ctx);
+  updatePendingUi();
+  scrollChat();
+  toast('已加入待回复。可以先投骰子或让 AI 同伴行动，最后按「回复给 KP」统一发送。', {
+    type: 'info',
+    duration: 4000,
+  });
+}
+
+async function replyKp(ctx) {
+  if (sending || actorBusy) return;
+  const pending = pendingTurnMessages();
+  if (!pending.length) {
+    toast('还没有待回复的行动或骰子。', { type: 'info' });
+    return;
+  }
+  await runKpTurn(ctx, { pendingMessages: pending });
 }
 
 async function handleCommand(text, ctx) {
   const parts = text.trim().split(/\s+/);
   const command = parts.shift().toLowerCase();
-  const character = selectedCharacter();
+  const character = povCharacter();
   if (command === '/help' || command === '/?') {
     const message = addMessage(
       'system',
@@ -1337,6 +1423,7 @@ export const tableView = {
       if (!(await storage.chats.get(chat.id))) await persistChat();
     }
     scrollChat();
+    updatePendingUi();
     if (campaign?.openingPending) {
       void openCampaignScene(ctx, { auto: true });
     }
@@ -1364,12 +1451,23 @@ export const tableView = {
       await sendMessage(ctx);
     },
 
+    async 'reply-kp'(element, ctx) {
+      await replyKp(ctx);
+    },
+
     async 'ai-actor'(element, ctx) {
       await runActorTurn(ctx, element.dataset.characterId || '');
     },
 
     async 'open-scene'(element, ctx) {
       await openCampaignScene(ctx);
+    },
+
+    async 'show-next-hint'(element) {
+      const hint = element.closest('.next-hint')?.querySelector('.next-hint__text');
+      if (!hint) return;
+      hint.hidden = !hint.hidden;
+      element.setAttribute('aria-expanded', String(!hint.hidden));
     },
 
     async 'abort-generation'() {
@@ -1397,15 +1495,17 @@ export const tableView = {
       if (!currentProfile) {
         return toast('请先配置 AI 接口。', { type: 'error' });
       }
+      const character = povCharacter();
       const userMessage = addMessage(
         'user',
         `【检定结果】${diceMessage.content}\n请依据这个结果继续描述可观察的后果。`,
-        {},
-        selectedCharacter()?.name || ''
+        { characterId: character?.id || '' },
+        character?.name || ''
       );
       appendMessageDom(userMessage);
       await persistChat();
-      await runKpTurn(userMessage, ctx);
+      updatePendingUi();
+      toast('检定结果已加入待回复；可按「回复给 KP」统一发送。', { type: 'info' });
     },
 
     async 'show-command-help'() {

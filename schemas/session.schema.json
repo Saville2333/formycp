@@ -169,7 +169,8 @@
             "type": ["string", "number", "boolean", "null"]
           }
         },
-        "lastKeeperSummary": { "type": "string", "maxLength": 8000 }
+        "lastKeeperSummary": { "type": "string", "maxLength": 8000 },
+        "nextHint": { "type": "string", "maxLength": 120 }
       },
       "additionalProperties": true
     },

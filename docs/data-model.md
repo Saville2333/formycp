@@ -147,7 +147,8 @@ Session
 │   ├── timeline[{ inGameTime, summary }]
 │   ├── unlockedContent { chapterIds[], sceneIds[], clueIds[] }
 │   ├── flags { key: scalar }
-│   └── lastKeeperSummary
+│   ├── lastKeeperSummary
+│   └── nextHint（可选：给玩家的一句话下一步提示）
 └── settings { contextRounds, retrievalTopK, narrativeMin/Max, showInternalState }
 ```
 

@@ -2160,6 +2160,34 @@ svg {
   color: #4d5a50;
 }
 
+.pending-turn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(185, 154, 91, 0.18);
+  background: rgba(185, 154, 91, 0.07);
+  color: var(--gold-dim);
+  font-family: var(--font-mono);
+  font-size: 8px;
+}
+
+.pending-turn[hidden] {
+  display: none !important;
+}
+
+.pending-turn span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pending-turn strong {
+  color: var(--gold-bright);
+  font-weight: 600;
+}
+
 .composer__bar {
   display: flex;
   align-items: center;
@@ -2178,7 +2206,6 @@ svg {
 .composer__send {
   min-height: 30px;
   font-size: 9px;
-  opacity: 0.5;
 }
 
 .kp-state {
@@ -5301,6 +5328,27 @@ svg {
   border-color: rgba(185, 154, 91, 0.42);
 }
 
+.next-hint {
+  display: grid;
+  gap: 7px;
+  justify-items: start;
+  margin: 10px 0 2px;
+}
+
+.next-hint__button {
+  color: var(--gold);
+}
+
+.next-hint__text {
+  margin: 0;
+  padding: 8px 11px;
+  border-left: 2px solid var(--gold);
+  background: rgba(185, 154, 91, 0.06);
+  color: #c8c4b3;
+  font-size: 9.5px;
+  line-height: 1.75;
+}
+
 .chat-opening {
   padding: 26px 20px;
   border: 1px dashed rgba(185, 154, 91, 0.3);
@@ -5558,6 +5606,15 @@ svg {
 
   .worldbook-stats {
     margin-top: 10px;
+  }
+
+  .pending-turn {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .pending-turn .btn {
+    width: 100%;
   }
 
   .composer__bar {
