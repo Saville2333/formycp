@@ -2146,7 +2146,9 @@ svg {
   display: block;
   width: 100%;
   min-height: 70px;
+  max-height: 180px;
   padding: 13px 14px;
+  overflow-y: auto;
   resize: none;
   border: 0;
   outline: 0;
@@ -2181,6 +2183,19 @@ svg {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+.pending-turn__label {
+  min-width: 0;
+}
+
+.pending-turn__label small {
+  max-width: 300px;
+  overflow: hidden;
+  color: var(--faint);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pending-turn strong {
@@ -4116,11 +4131,38 @@ svg {
 }
 
 .play-chat {
+  position: relative;
   display: flex;
   flex-direction: column;
   background:
     radial-gradient(500px 260px at 50% 0%, rgba(31, 63, 46, 0.14), transparent 70%),
     rgba(7, 17, 12, 0.96);
+}
+
+.chat-jump {
+  position: absolute;
+  z-index: 6;
+  right: 24px;
+  bottom: 164px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid rgba(185, 154, 91, 0.35);
+  background: rgba(13, 30, 21, 0.96);
+  color: var(--gold);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.chat-jump[hidden] {
+  display: none !important;
+}
+
+.chat-jump .icon {
+  transform: rotate(90deg);
 }
 
 .chat-head--play {
@@ -4386,6 +4428,14 @@ svg {
 
 .dice-tools__row #check-skill {
   max-width: 190px;
+}
+
+.check-value {
+  min-width: 34px;
+  color: var(--gold);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  text-align: right;
 }
 
 .check-label {
@@ -5615,6 +5665,11 @@ svg {
 
   .pending-turn .btn {
     width: 100%;
+  }
+
+  .chat-jump {
+    right: 12px;
+    bottom: 154px;
   }
 
   .composer__bar {

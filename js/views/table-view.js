@@ -44,6 +44,7 @@ let abortController = null;
 let currentProfile = null;
 let worldbookEntries = [];
 let pendingResolution = null;
+let chatFollow = true;
 
 const DIFFICULTY_ALIASES = {
   regular: 'regular',
@@ -579,6 +580,9 @@ function renderTable() {
             : ''
         }
       </div>
+      <button class="chat-jump" type="button" data-action="scroll-latest" hidden>${icon(
+        'arrow-right'
+      )} 最新</button>
 
       <div class="chat-composer">
         <div class="dice-tools">
@@ -607,6 +611,7 @@ function renderTable() {
               <option value="hard">困难</option>
               <option value="extreme">极难</option>
             </select>
+            <span class="check-value" id="check-value" aria-live="polite">—</span>
             <button class="btn btn--gold btn--sm" type="button" data-action="quick-check">${icon(
               'dice'
             )} 自动投骰</button>
@@ -619,7 +624,9 @@ function renderTable() {
             sending || actorBusy ? 'disabled' : ''
           }></textarea>
           <div class="pending-turn" data-pending-bar ${pendingTurn.length ? '' : 'hidden'}>
-            <span>${icon('scroll')} 待回复 KP：<strong data-pending-count>${pendingTurn.length}</strong> 条行动 / 骰子</span>
+            <span class="pending-turn__label">${icon(
+              'scroll'
+            )} 待回复 KP：<strong data-pending-count>${pendingTurn.length}</strong> 条 <small data-pending-summary></small></span>
             <button class="btn btn--primary btn--sm" type="button" data-action="reply-kp" ${
               sending || actorBusy || !pendingTurn.length ? 'disabled' : ''
             }>${icon('arrow-right')} 回复给 KP</button>
@@ -652,9 +659,34 @@ function renderTable() {
  * 消息与滚动
  * ========================================================= */
 
-function scrollChat() {
+function updateJumpButton(container = document.getElementById('chat-messages')) {
+  const button = document.querySelector('[data-action="scroll-latest"]');
+  if (!button || !container) return;
+  const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
+  button.hidden = distance < 100;
+}
+
+function scrollChat(force = false) {
   const container = document.getElementById('chat-messages');
-  if (container) container.scrollTop = container.scrollHeight;
+  if (!container) return;
+  if (force) chatFollow = true;
+  if (chatFollow) container.scrollTop = container.scrollHeight;
+  updateJumpButton(container);
+}
+
+function resizeComposer(input = document.getElementById('chat-input')) {
+  if (!input) return;
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(180, Math.max(70, input.scrollHeight))}px`;
+}
+
+function updateCheckValue() {
+  const character = povCharacter();
+  const skillName = document.getElementById('check-skill')?.value || '';
+  const value = document.getElementById('check-value');
+  if (!value) return;
+  const skill = (character?.skills || []).find((item) => item.name === skillName);
+  value.textContent = skill ? `${skill.total}%` : '—';
 }
 
 function appendMessageDom(message) {
@@ -758,10 +790,7 @@ async function quickCheckFromTools() {
     meta,
     options.hidden
   );
-  toast(`${character.name} 的「${skillName}」已自动投骰并加入待回复。`, {
-    type: 'info',
-    duration: 3000,
-  });
+  document.getElementById('chat-input')?.focus({ preventScroll: true });
 }
 
 async function quickSanFromTools() {
@@ -887,6 +916,13 @@ function updatePendingUi() {
   bar.hidden = pending.length === 0;
   const count = bar.querySelector('[data-pending-count]');
   if (count) count.textContent = String(pending.length);
+  const summary = bar.querySelector('[data-pending-summary]');
+  if (summary) {
+    const lastUser = [...pending].reverse().find((message) => message.role === 'user');
+    const text = lastUser?.content ? String(lastUser.content).replace(/\s+/g, ' ').trim() : '';
+    summary.textContent = text ? `· ${text.slice(0, 34)}${text.length > 34 ? '…' : ''}` : '· 仅骰子';
+    summary.title = text || '仅骰子';
+  }
   const button = bar.querySelector('[data-action="reply-kp"]');
   if (button) button.disabled = sending || actorBusy || pending.length === 0;
 }
@@ -1113,11 +1149,8 @@ async function runActorTurn(ctx, characterId = '') {
     await persistChat();
     setActorBusy(false);
     updatePendingUi();
-    scrollChat();
-    toast(`已加入待回复：${character.name} 行动 + 自动检定。按下「回复给 KP」统一发送。`, {
-      type: 'info',
-      duration: 4000,
-    });
+    scrollChat(true);
+    document.getElementById('chat-input')?.focus({ preventScroll: true });
   } catch (error) {
     toast(`AI 代演失败：${error.message}`, { type: 'error', duration: 7000 });
   } finally {
@@ -1132,6 +1165,7 @@ async function sendMessage(ctx) {
   if (sending || actorBusy) return;
   if (text.startsWith('/')) {
     input.value = '';
+    resizeComposer(input);
     await handleCommand(text, ctx);
     return;
   }
@@ -1143,14 +1177,12 @@ async function sendMessage(ctx) {
     character?.name || ''
   );
   input.value = '';
+  resizeComposer(input);
   appendMessageDom(message);
   await persistChat();
   updatePendingUi();
-  scrollChat();
-  toast('已加入待回复。可以先投骰子或让 AI 同伴行动，最后按「回复给 KP」统一发送。', {
-    type: 'info',
-    duration: 4000,
-  });
+  scrollChat(true);
+  input.focus({ preventScroll: true });
 }
 
 async function replyKp(ctx) {
@@ -1402,11 +1434,18 @@ export const tableView = {
   async mount({ ctx }) {
     const input = document.getElementById('chat-input');
     input?.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        sendMessage(ctx);
+      if (event.key !== 'Enter' || event.shiftKey) return;
+      event.preventDefault();
+      if (event.ctrlKey || event.metaKey) {
+        void (async () => {
+          if (String(input.value || '').trim()) await sendMessage(ctx);
+          await replyKp(ctx);
+        })();
+        return;
       }
+      sendMessage(ctx);
     });
+    input?.addEventListener('input', () => resizeComposer(input));
     const diceInput = document.getElementById('dice-expression');
     diceInput?.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
@@ -1414,6 +1453,16 @@ export const tableView = {
         rollFromTools(ctx);
       }
     });
+    document.getElementById('check-skill')?.addEventListener('change', updateCheckValue);
+    const messageContainer = document.getElementById('chat-messages');
+    messageContainer?.addEventListener('scroll', () => {
+      const distance =
+        messageContainer.scrollHeight - messageContainer.scrollTop - messageContainer.clientHeight;
+      chatFollow = distance < 100;
+      updateJumpButton(messageContainer);
+    });
+    resizeComposer(input);
+    updateCheckValue();
     if (campaign) {
       if (!chat.createdAt) chat.createdAt = new Date().toISOString();
       if (!campaign.chatIds?.includes(chat.id)) {
@@ -1422,7 +1471,8 @@ export const tableView = {
       }
       if (!(await storage.chats.get(chat.id))) await persistChat();
     }
-    scrollChat();
+    chatFollow = true;
+    scrollChat(true);
     updatePendingUi();
     if (campaign?.openingPending) {
       void openCampaignScene(ctx, { auto: true });
@@ -1468,6 +1518,10 @@ export const tableView = {
       if (!hint) return;
       hint.hidden = !hint.hidden;
       element.setAttribute('aria-expanded', String(!hint.hidden));
+    },
+
+    async 'scroll-latest'() {
+      scrollChat(true);
     },
 
     async 'abort-generation'() {
