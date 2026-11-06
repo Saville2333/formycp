@@ -331,6 +331,13 @@ function renderSkillRows() {
         <td>
           <span class="skill-name">${escapeHTML(skill.name)}</span>
           ${isOccupation ? '<span class="tag tag--pc">本职</span>' : ''}
+          ${
+            !isOccupation && !['母语', '闪避', '信用评级'].includes(skill.name)
+              ? `<button class="skill-remove" type="button" data-action="remove-skill" data-skill-index="${index}" title="移除这项技能" aria-label="移除 ${escapeHTML(
+                  skill.name
+                )}">${icon('x', 'icon--sm')}</button>`
+              : ''
+          }
         </td>
         <td class="num">${skill.base}</td>
         <td class="num"><input class="table-input" type="number" min="0" max="99" step="1" value="${
@@ -1251,6 +1258,16 @@ export const characterView = {
           </label>
         </div>
         <p class="form-help">带子类的技能会要求填写学科、语种、环境、载具或武器类型；添加后仍可分配职业点/兴趣点。</p>
+        <div class="skill-picker__detail" id="skill-picker-detail" hidden>
+          <label class="form-field">
+            <span class="form-field__label" id="skill-detail-label">子类</span>
+            <input class="form-input" id="skill-detail-input">
+          </label>
+          <div class="skill-picker__detail-actions">
+            <button class="btn btn--ghost btn--sm" type="button" data-cancel-skill-detail>取消</button>
+            <button class="btn btn--primary btn--sm" type="button" data-confirm-skill-detail>添加</button>
+          </div>
+        </div>
         <div class="skill-picker__list" id="skill-picker-list">${renderSkillPickerList()}</div>
       </div>`;
       openModal({
@@ -1268,36 +1285,16 @@ export const characterView = {
               dialog.querySelector('#skill-picker-category')?.value || 'all'
             );
           };
-          dialog.querySelector('#skill-picker-search')?.addEventListener('input', paint);
-          dialog.querySelector('#skill-picker-category')?.addEventListener('change', paint);
-          list?.addEventListener('click', (event) => {
-            const button = event.target.closest('[data-add-catalog-skill]');
-            if (!button) return;
-            const entry = SKILL_CATALOG[Number(button.dataset.addCatalogSkill)];
-            if (!entry) return;
-            let name = entry.name;
-            if (entry.detail) {
-              const detail = window.prompt(
-                `请填写${entry.detail}（例如：${entry.detailPlaceholder || '自定义'}）`,
-                entry.detailPlaceholder || ''
-              );
-              if (detail === null) return;
-              const clean = detail.trim();
-              if (!clean) {
-                toast(`请填写${entry.detail}。`, { type: 'warning' });
-                return;
-              }
-              const baseName =
-                entry.detailMode === 'language'
-                  ? '语言'
-                  : entry.name.replace(/（其他）$/, '');
-              name = `${baseName}（${clean}）`;
-            }
+          let pendingEntry = null;
+          const detailPanel = dialog.querySelector('#skill-picker-detail');
+          const detailInput = dialog.querySelector('#skill-detail-input');
+          const detailLabel = dialog.querySelector('#skill-detail-label');
+          const addSkill = (name, preferredBase) => {
             if (draft.skills.some((skill) => skill.name === name)) {
               toast(`「${name}」已经在技能表里了。`, { type: 'info' });
-              return;
+              return false;
             }
-            const base = baseSkillValue(name, draft.attributes) || entry.base || 1;
+            const base = baseSkillValue(name, draft.attributes) || preferredBase || 1;
             draft.skills.push({
               name,
               base,
@@ -1309,10 +1306,71 @@ export const characterView = {
             closeModal();
             ctx.refresh();
             toast(`已添加「${name}」，基础值 ${base}%。`, { type: 'success' });
+            return true;
+          };
+          const showDetail = (entry) => {
+            pendingEntry = entry;
+            if (detailLabel) detailLabel.textContent = `请填写${entry.detail}`;
+            if (detailInput) {
+              detailInput.value = '';
+              detailInput.placeholder = entry.detailPlaceholder || '自定义';
+              detailInput.focus();
+            }
+            if (detailPanel) detailPanel.hidden = false;
+          };
+          const hideDetail = () => {
+            pendingEntry = null;
+            if (detailPanel) detailPanel.hidden = true;
+          };
+          dialog.querySelector('#skill-picker-search')?.addEventListener('input', paint);
+          dialog.querySelector('#skill-picker-category')?.addEventListener('change', paint);
+          dialog.querySelector('[data-cancel-skill-detail]')?.addEventListener('click', hideDetail);
+          dialog.querySelector('[data-confirm-skill-detail]')?.addEventListener('click', () => {
+            if (!pendingEntry) return;
+            const clean = String(detailInput?.value || '').trim();
+            if (!clean) {
+              toast(`请填写${pendingEntry.detail}。`, { type: 'warning' });
+              detailInput?.focus();
+              return;
+            }
+            const baseName =
+              pendingEntry.detailMode === 'language'
+                ? '语言'
+                : pendingEntry.name.replace(/（其他）$/, '');
+            addSkill(`${baseName}（${clean}）`, pendingEntry.base);
+          });
+          detailInput?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              dialog.querySelector('[data-confirm-skill-detail]')?.click();
+            }
+          });
+          list?.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-add-catalog-skill]');
+            if (!button) return;
+            const entry = SKILL_CATALOG[Number(button.dataset.addCatalogSkill)];
+            if (!entry) return;
+            if (entry.detail) {
+              showDetail(entry);
+              return;
+            }
+            addSkill(entry.name, entry.base);
           });
         },
       });
       setTimeout(() => document.getElementById('skill-picker-search')?.focus(), 50);
+    },
+
+    async 'remove-skill'(element, ctx) {
+      const index = Number(element.dataset.skillIndex);
+      const skill = draft.skills[index];
+      if (!skill) return;
+      if (['母语', '闪避', '信用评级'].includes(skill.name)) {
+        return toast('母语、闪避与信用评级是车卡必需项，不能移除。', { type: 'info' });
+      }
+      draft.skills.splice(index, 1);
+      ctx.refresh();
+      toast(`已移除「${skill.name}」。`, { type: 'info' });
     },
 
     async 'add-custom-skill'(element, ctx) {

@@ -46,6 +46,7 @@ let currentProfile = null;
 let worldbookEntries = [];
 let pendingResolution = null;
 let chatFollow = true;
+let lastCombatSceneId = '';
 
 const DIFFICULTY_ALIASES = {
   regular: 'regular',
@@ -224,24 +225,47 @@ function renderSetup() {
   </div>`;
 }
 
+function isPendingMessage(message) {
+  return pendingTurnMessages().some((item) => item.id === message.id);
+}
+
+function messageActionsMarkup(message) {
+  if (!['user', 'dice'].includes(message.role)) return '';
+  const pending = isPendingMessage(message);
+  return `<div class="message-actions">
+    ${
+      message.role === 'user'
+        ? `<button class="message-action" type="button" data-action="edit-message" data-message-id="${escapeHTML(
+            message.id
+          )}" title="修改这条记录">${icon('edit', 'icon--sm')} 修改</button>`
+        : ''
+    }
+    <button class="message-action message-action--danger" type="button" data-action="delete-message" data-message-id="${escapeHTML(
+      message.id
+    )}" title="删除这条记录">${icon('trash', 'icon--sm')} 删除</button>
+    ${pending ? '<span class="message-action__pending">待回复</span>' : ''}
+  </div>`;
+}
+
 function messageMarkup(message) {
   if (message.role === 'dice') {
     const diceMeta = message.meta?.dice || {};
     const hidden = Boolean(message.meta?.hidden) && !message.meta?.revealed;
     if (hidden) {
-      return `<article class="chat-message chat-message--dice is-hidden" data-message-id="${escapeHTML(
-        message.id
-      )}">
+      return `<article class="chat-message chat-message--dice is-hidden${
+        isPendingMessage(message) ? ' is-pending' : ''
+      }" data-message-id="${escapeHTML(message.id)}">
         <div class="dice-card__top"><span class="dice-card__kicker">${icon('eye')} 暗骰</span><span class="tag">仅 KP 可见</span></div>
         <p class="dice-card__summary">结果已记录，但不会展示给玩家。</p>
         <button class="btn btn--ghost btn--sm" type="button" data-action="reveal-dice" data-message-id="${escapeHTML(
           message.id
         )}">揭示结果</button>
+        ${messageActionsMarkup(message)}
       </article>`;
     }
-    return `<article class="chat-message chat-message--dice" data-message-id="${escapeHTML(
-      message.id
-    )}">
+    return `<article class="chat-message chat-message--dice${
+      isPendingMessage(message) ? ' is-pending' : ''
+    }" data-message-id="${escapeHTML(message.id)}">
       <div class="dice-card__top">
         <span class="dice-card__kicker">${icon('dice')} ${escapeHTML(
           diceMeta.kind === 'check' ? '技能检定' : diceMeta.kind === 'san' ? 'SAN 检定' : '骰子'
@@ -280,6 +304,7 @@ function messageMarkup(message) {
         )}">${icon('arrow-right')} 把结果交给 KP</button>
         <span class="faint">${escapeHTML(messageTime(message.createdAt))}</span>
       </div>
+      ${messageActionsMarkup(message)}
     </article>`;
   }
 
@@ -289,9 +314,9 @@ function messageMarkup(message) {
       : message.role === 'system'
         ? '桌面'
         : message.speaker || selectedCharacter()?.name || '调查员';
-  return `<article class="chat-message chat-message--${escapeHTML(message.role)}" data-message-id="${escapeHTML(
-    message.id
-  )}">
+  return `<article class="chat-message chat-message--${escapeHTML(message.role)}${
+    isPendingMessage(message) ? ' is-pending' : ''
+  }" data-message-id="${escapeHTML(message.id)}">
     <div class="chat-message__head">
       <span class="chat-message__speaker">${escapeHTML(speaker)}${
         message.meta?.aiActor ? ' · AI 代演' : ''
@@ -299,6 +324,7 @@ function messageMarkup(message) {
       <span class="chat-message__time">${escapeHTML(messageTime(message.createdAt))}</span>
     </div>
     <div class="chat-message__text" data-message-text>${escapeHTML(message.content)}</div>
+    ${messageActionsMarkup(message)}
   </article>`;
 }
 
@@ -718,6 +744,15 @@ function appendMessageDom(message) {
   return element;
 }
 
+function replaceMessageDom(message) {
+  const existing = document.querySelector(`[data-message-id="${CSS.escape(message.id)}"]`);
+  if (!existing) return;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = messageMarkup(message);
+  const next = wrapper.firstElementChild;
+  if (next) existing.replaceWith(next);
+}
+
 async function persistChat() {
   if (!chat) return;
   chat.updatedAt = new Date().toISOString();
@@ -758,7 +793,9 @@ async function addDiceMessage(content, diceMeta, hidden = false) {
     hidden,
     revealed: false,
   });
-  appendMessageDom(message);
+  const element = appendMessageDom(message);
+  element?.classList.add('is-rolling');
+  setTimeout(() => element?.classList.remove('is-rolling'), 720);
   await persistChat();
   updatePendingUi();
   return message;
@@ -945,6 +982,38 @@ function updatePendingUi() {
   if (button) button.disabled = sending || actorBusy || pending.length === 0;
 }
 
+const COMBAT_SCENE_RE = /战斗|交战|遭遇|袭击|枪战|搏斗|追逐|厮杀|开火|敌意|怪物|危险/;
+
+function sceneLooksLikeCombat(scene) {
+  if (!scene) return false;
+  return COMBAT_SCENE_RE.test(
+    `${scene.title || ''}\n${scene.summary || ''}\n${scene.readAloud || ''}\n${String(
+      scene.content || ''
+    ).slice(0, 800)}`
+  );
+}
+
+export function playSceneTransition(kind, title, subtitle = '') {
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+  document.querySelector('.scene-transition')?.remove();
+  const node = document.createElement('div');
+  node.className = `scene-transition scene-transition--${kind}`;
+  node.innerHTML = `<div class="scene-transition__frame">
+    <p class="scene-transition__kicker">${
+      kind === 'combat' ? 'COMBAT ENCOUNTER' : 'NEW AREA'
+    }</p>
+    <h2 class="scene-transition__title">${escapeHTML(title)}</h2>
+    ${subtitle ? `<p class="scene-transition__subtitle">${escapeHTML(subtitle)}</p>` : ''}
+    <span class="scene-transition__line"></span>
+  </div>`;
+  document.body.appendChild(node);
+  requestAnimationFrame(() => node.classList.add('is-active'));
+  setTimeout(() => {
+    node.classList.add('is-leaving');
+    setTimeout(() => node.remove(), 650);
+  }, 1900);
+}
+
 async function openCampaignScene(ctx, { auto = false } = {}) {
   if (!campaign || !moduleData || campaign.status === 'completed') return;
   if (!currentProfile) {
@@ -1039,6 +1108,8 @@ async function runKpTurn(ctx, { opening = false, pendingMessages = null } = {}) 
     }
 
     const parsed = parseKpStateBlock(result.content);
+    const previousSceneId = campaign.kpState?.currentSceneId || '';
+    const previousTriggered = new Set(campaign.kpState?.triggeredEventIds || []);
     let merged = { state: campaign.kpState, warnings: [] };
     if (parsed.statePatch) {
       merged = mergeKpState(campaign.kpState, parsed.statePatch, moduleData, {
@@ -1068,6 +1139,31 @@ async function runKpTurn(ctx, { opening = false, pendingMessages = null } = {}) 
     if (textElement) textElement.textContent = assistant.content;
     element?.classList.remove('is-streaming');
     updateKpPanel();
+    const nextScene = findScene(moduleData, merged.state.currentSceneId)?.scene;
+    const areaChanged = Boolean(
+      previousSceneId && nextScene?.id && previousSceneId !== nextScene.id
+    );
+    const combatEvent = (moduleData?.events || []).find(
+      (event) =>
+        !previousTriggered.has(event.id) &&
+        (merged.state.triggeredEventIds || []).includes(event.id) &&
+        COMBAT_SCENE_RE.test(`${event.title || ''}\n${event.description || ''}`)
+    );
+    const combatIntent =
+      !opening && /攻击|开枪|射击|挥刀|扑向|冲上去|格斗|搏斗|战斗|开火/.test(pendingInput);
+    const combatSceneId = merged.state.currentSceneId || '';
+    const combatStarted =
+      Boolean(combatEvent) ||
+      sceneLooksLikeCombat(nextScene) ||
+      (combatIntent && lastCombatSceneId !== combatSceneId);
+    if (!opening && combatStarted && lastCombatSceneId !== combatSceneId) {
+      lastCombatSceneId = combatSceneId;
+      playSceneTransition('combat', '进入战斗', nextScene?.title || combatEvent?.title || '');
+    } else if (!opening && combatEvent) {
+      playSceneTransition('combat', '进入战斗', combatEvent.title || '');
+    } else if (!opening && areaChanged) {
+      playSceneTransition('area', nextScene?.title || '新的区域', '场景已更新');
+    }
     if (merged.warnings.length) {
       console.warn('[Cthulhu Table] KP 状态警告：', merged.warnings);
     }
@@ -1545,6 +1641,79 @@ export const tableView = {
 
     async 'scroll-latest'() {
       scrollChat(true);
+    },
+
+    async 'edit-message'(element, ctx) {
+      const message = chat?.messages.find((item) => item.id === element.dataset.messageId);
+      if (!message || message.role !== 'user') return;
+      const pending = isPendingMessage(message);
+      const body = `<label class="form-field">
+        <span class="form-field__label">行动 / 台词</span>
+        <textarea class="form-input form-textarea" id="edit-message-text" rows="7">${escapeHTML(
+          message.content
+        )}</textarea>
+      </label>
+      <div class="info-strip">${icon('edit')}<span>${
+        pending
+          ? '这条记录还在待回复队列里，修改后按「回复给 KP」时会使用新内容。'
+          : '这会修改聊天记录与后续上下文，但不会回滚已经发生的 KP 状态、骰点或世界书日志。'
+      }</span></div>`;
+      openModal({
+        eyebrow: 'Edit Message',
+        title: pending ? '修改待回复行动' : '修改已发送行动',
+        body,
+        footer: `<div class="modal-actions">
+          <button class="btn btn--ghost" type="button" data-close-dialog>取消</button>
+          <button class="btn btn--primary" type="button" data-save-message-edit>${icon(
+            'check'
+          )} 保存修改</button>
+        </div>`,
+        onMount: (dialog) => {
+          const textarea = dialog.querySelector('#edit-message-text');
+          textarea?.focus();
+          textarea?.setSelectionRange(textarea.value.length, textarea.value.length);
+          dialog.querySelector('[data-save-message-edit]')?.addEventListener('click', async () => {
+            const content = String(textarea?.value || '').trim();
+            if (!content) {
+              toast('行动内容不能为空。', { type: 'warning' });
+              textarea?.focus();
+              return;
+            }
+            message.content = content;
+            message.editedAt = new Date().toISOString();
+            await persistChat();
+            closeModal();
+            replaceMessageDom(message);
+            updatePendingUi();
+            toast(pending ? '待回复行动已修改。' : '聊天记录已修改。', { type: 'success' });
+          });
+        },
+      });
+    },
+
+    async 'delete-message'(element) {
+      const message = chat?.messages.find((item) => item.id === element.dataset.messageId);
+      if (!message || !['user', 'dice'].includes(message.role)) return;
+      const pending = isPendingMessage(message);
+      const ok = await confirmDialog({
+        eyebrow: '删除记录',
+        title: pending ? '从待回复队列移除？' : '删除这条已发送记录？',
+        message: pending
+          ? '这条行动/骰子还没有发送给 KP，删除后不会影响剧情状态。'
+          : message.role === 'dice'
+            ? '只会删除聊天中的骰子卡片；已经扣掉的 SAN、幸运或造成的角色状态不会自动回滚。'
+            : '只会删除聊天记录；已生成的 KP 叙事、状态推进与世界书日志不会回滚。',
+        confirmLabel: '删除',
+        danger: true,
+      });
+      if (!ok) return;
+      const index = chat.messages.findIndex((item) => item.id === message.id);
+      if (index === -1) return;
+      chat.messages.splice(index, 1);
+      await persistChat();
+      document.querySelector(`[data-message-id="${CSS.escape(message.id)}"]`)?.remove();
+      updatePendingUi();
+      toast('记录已删除。', { type: 'info' });
     },
 
     async 'abort-generation'() {

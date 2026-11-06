@@ -3232,6 +3232,25 @@ svg {
   margin-right: 5px;
 }
 
+.skill-remove {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  margin-left: 3px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.skill-remove:hover {
+  color: #d28b7d;
+  opacity: 1;
+}
+
 .skill-picker {
   display: grid;
   gap: 12px;
@@ -3249,6 +3268,24 @@ svg {
   max-height: 52vh;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.skill-picker__detail {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(185, 154, 91, 0.35);
+  background: rgba(185, 154, 91, 0.07);
+}
+
+.skill-picker__detail[hidden] {
+  display: none !important;
+}
+
+.skill-picker__detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
 }
 
 .skill-picker__heading {
@@ -4311,6 +4348,60 @@ svg {
   background: linear-gradient(145deg, rgba(38, 69, 53, 0.5), rgba(17, 35, 26, 0.7));
 }
 
+.chat-message.is-pending {
+  border-color: rgba(185, 154, 91, 0.34);
+}
+
+.message-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 4px;
+  border: 1px solid rgba(185, 154, 91, 0.18);
+  background: rgba(7, 17, 12, 0.96);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+
+.chat-message:hover .message-actions,
+.chat-message:focus-within .message-actions,
+.chat-message.is-pending .message-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.message-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 5px;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  cursor: pointer;
+}
+
+.message-action:hover {
+  color: var(--gold);
+}
+
+.message-action--danger:hover {
+  color: #d28b7d;
+}
+
+.message-action__pending {
+  padding: 2px 4px;
+  color: var(--gold-dim);
+  font-family: var(--font-mono);
+  font-size: 6.5px;
+}
+
 .chat-message--assistant {
   margin-right: auto;
   border-color: rgba(184, 154, 93, 0.2);
@@ -4417,6 +4508,152 @@ svg {
   font-size: 10px;
   line-height: 1.8;
   overflow-wrap: anywhere;
+}
+
+@keyframes dice-tumble {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) rotateX(72deg) scale(0.9);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-2px) rotateX(-8deg) scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotateX(0) scale(1);
+  }
+}
+
+@keyframes dice-flash {
+  0% {
+    color: var(--gold-bright);
+    text-shadow: 0 0 12px rgba(226, 194, 120, 0.65);
+  }
+  100% {
+    color: #d0c9b5;
+    text-shadow: none;
+  }
+}
+
+.chat-message--dice.is-rolling {
+  transform-origin: 50% 100%;
+  animation: dice-tumble 0.58s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+
+.chat-message--dice.is-rolling .dice-card__formula {
+  animation: dice-flash 0.65s ease-out;
+}
+
+.scene-transition {
+  position: fixed;
+  z-index: 240;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(43, 82, 61, 0.3), transparent 55%),
+    rgba(3, 9, 6, 0.82);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+.scene-transition.is-active {
+  opacity: 1;
+}
+
+.scene-transition.is-leaving {
+  opacity: 0;
+}
+
+.scene-transition__frame {
+  position: relative;
+  width: min(520px, calc(100vw - 44px));
+  padding: 30px 24px;
+  border-top: 1px solid rgba(185, 154, 91, 0.45);
+  border-bottom: 1px solid rgba(185, 154, 91, 0.45);
+  text-align: center;
+}
+
+.scene-transition__kicker {
+  margin: 0 0 9px;
+  color: var(--gold);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.22em;
+}
+
+.scene-transition__title {
+  margin: 0;
+  color: #e2d8bd;
+  font-family: var(--font-display);
+  font-size: clamp(22px, 4vw, 34px);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
+
+.scene-transition__subtitle {
+  margin: 8px 0 0;
+  color: var(--faint);
+  font-size: 10px;
+}
+
+.scene-transition__line {
+  display: block;
+  width: 64px;
+  height: 1px;
+  margin: 18px auto 0;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  transform: scaleX(0);
+}
+
+.scene-transition.is-active .scene-transition__line {
+  animation: transition-line 0.7s 0.1s ease forwards;
+}
+
+.scene-transition--combat {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(130, 48, 34, 0.4), transparent 56%),
+    rgba(9, 3, 2, 0.86);
+}
+
+.scene-transition--combat .scene-transition__kicker {
+  color: #d28b7d;
+}
+
+.scene-transition__frame {
+  animation: transition-frame 0.6s cubic-bezier(0.2, 0.9, 0.25, 1.1);
+}
+
+.scene-transition--combat .scene-transition__frame {
+  animation: transition-frame 0.5s cubic-bezier(0.2, 0.9, 0.25, 1.1), combat-shake 0.55s 0.08s ease-out;
+}
+
+@keyframes transition-frame {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes transition-line {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes combat-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(1px); }
 }
 
 .dice-card__detail {
@@ -5996,6 +6233,17 @@ svg {
     max-height: 58vh;
   }
 
+  .message-actions {
+    position: static;
+    justify-content: flex-end;
+    margin-top: 6px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   .view {
     padding: 24px 16px 48px;
   }
@@ -6235,4 +6483,19 @@ html[data-reduce-motion="true"] *::after {
   animation-duration: 0.001ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-message--dice.is-rolling,
+  .chat-message--dice.is-rolling .dice-card__formula,
+  .scene-transition,
+  .scene-transition__frame,
+  .scene-transition__line {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .scene-transition {
+    display: none !important;
+  }
 }
