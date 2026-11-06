@@ -60,59 +60,136 @@ export function ageBracket(age) {
   return '80-120';
 }
 
+export const SKILL_CATEGORIES = Object.freeze([
+  { id: 'explore', name: '探索与观察' },
+  { id: 'social', name: '社交与交涉' },
+  { id: 'knowledge', name: '知识与学问' },
+  { id: 'medical', name: '医疗与精神' },
+  { id: 'technical', name: '技术与操作' },
+  { id: 'movement', name: '移动与生存' },
+  { id: 'combat', name: '战斗' },
+  { id: 'optional', name: '可选 / 扩展' },
+]);
+
+/**
+ * 完整可选技能表。base 为未分配时的基础值。
+ * detail 表示需要补子类（学科/语种/环境/载具/武器等），格式化为「技能（子类）」。
+ */
+export const SKILL_CATALOG = Object.freeze([
+  // 探索与观察
+  { category: 'explore', name: '侦查', base: 25, note: 'Spot Hidden' },
+  { category: 'explore', name: '聆听', base: 20, note: 'Listen' },
+  { category: 'explore', name: '图书馆使用', base: 20, note: 'Library Use' },
+  { category: 'explore', name: '追踪', base: 10, note: 'Track' },
+  { category: 'explore', name: '读唇', base: 1, note: 'Lip Reading，扩展' },
+  { category: 'explore', name: '心理学', base: 10, note: 'Psychology' },
+
+  // 社交与交涉
+  { category: 'social', name: '取悦', base: 15, note: 'Charm' },
+  { category: 'social', name: '话术', base: 5, note: 'Fast Talk' },
+  { category: 'social', name: '说服', base: 10, note: 'Persuade' },
+  { category: 'social', name: '恐吓', base: 15, note: 'Intimidate' },
+  { category: 'social', name: '信用评级', base: 0, note: '不随使用成长' },
+  { category: 'social', name: '乔装', base: 5, note: 'Disguise' },
+
+  // 知识与学问
+  { category: 'knowledge', name: '会计', base: 5, note: 'Accounting' },
+  { category: 'knowledge', name: '人类学', base: 1, note: 'Anthropology' },
+  { category: 'knowledge', name: '考古学', base: 1, note: 'Archaeology' },
+  { category: 'knowledge', name: '历史', base: 5, note: 'History' },
+  { category: 'knowledge', name: '法律', base: 5, note: 'Law' },
+  { category: 'knowledge', name: '神秘学', base: 5, note: 'Occult' },
+  { category: 'knowledge', name: '克苏鲁神话', base: 0, note: '特殊' },
+  { category: 'knowledge', name: '博物学', base: 10, note: 'Natural World' },
+  { category: 'knowledge', name: '科学', base: 1, detail: '学科', detailPlaceholder: '生物学', note: 'Science' },
+  { category: 'knowledge', name: '生物学', base: 1, note: '科学子类' },
+  { category: 'knowledge', name: '密码学', base: 1, note: '科学子类' },
+  { category: 'knowledge', name: '气象学', base: 1, note: '科学子类' },
+  { category: 'knowledge', name: '司法科学', base: 1, note: '科学子类，可选' },
+  { category: 'knowledge', name: '药学', base: 1, note: '科学子类，可选' },
+  { category: 'knowledge', name: '母语', base: 0, note: '基础值 = EDU' },
+  { category: 'knowledge', name: '语言（其他）', base: 1, detail: '语种', detailPlaceholder: '拉丁语', detailMode: 'language', note: 'Language (Other)' },
+  { category: 'knowledge', name: '拉丁语', base: 1, note: '语言子类' },
+  { category: 'knowledge', name: '英语', base: 1, note: '语言子类' },
+  { category: 'knowledge', name: '法语', base: 1, note: '语言子类' },
+  { category: 'knowledge', name: '德语', base: 1, note: '语言子类' },
+
+  // 医疗与精神
+  { category: 'medical', name: '急救', base: 30, note: 'First Aid' },
+  { category: 'medical', name: '医学', base: 1, note: 'Medicine' },
+  { category: 'medical', name: '精神分析', base: 1, note: 'Psychoanalysis' },
+  { category: 'medical', name: '心理分析', base: 1, note: '精神分析旧译名' },
+  { category: 'medical', name: '催眠', base: 1, note: 'Hypnosis，扩展' },
+
+  // 技术与操作
+  { category: 'technical', name: '估价', base: 5, note: 'Appraise' },
+  { category: 'technical', name: '技艺', base: 5, detail: '方向', detailPlaceholder: '绘画', note: 'Art & Craft' },
+  { category: 'technical', name: '艺术', base: 5, note: '技艺子类' },
+  { category: 'technical', name: '摄影', base: 5, note: '技艺子类' },
+  { category: 'technical', name: '伪造', base: 5, note: '技艺子类' },
+  { category: 'technical', name: '表演', base: 5, note: '技艺子类，可选' },
+  { category: 'technical', name: '锁匠', base: 1, note: 'Locksmith' },
+  { category: 'technical', name: '妙手', base: 10, note: 'Sleight of Hand' },
+  { category: 'technical', name: '机械维修', base: 10, note: 'Mechanical Repair' },
+  { category: 'technical', name: '电气维修', base: 10, note: 'Electrical Repair' },
+  { category: 'technical', name: '电子学', base: 1, note: 'Electronics' },
+  { category: 'technical', name: '计算机使用', base: 5, note: 'Computer Use' },
+  { category: 'technical', name: '操作重型机械', base: 1, note: 'Operate Heavy Machinery' },
+  { category: 'technical', name: '爆破', base: 1, note: 'Demolitions' },
+
+  // 移动与生存
+  { category: 'movement', name: '攀爬', base: 20, note: 'Climb' },
+  { category: 'movement', name: '跳跃', base: 20, note: 'Jump' },
+  { category: 'movement', name: '游泳', base: 20, note: 'Swim' },
+  { category: 'movement', name: '潜水', base: 1, note: 'Scuba，扩展' },
+  { category: 'movement', name: '潜行', base: 20, note: 'Stealth' },
+  { category: 'movement', name: '生存', base: 10, detail: '环境', detailPlaceholder: '荒野', note: 'Survival' },
+  { category: 'movement', name: '导航', base: 10, note: 'Navigate' },
+  { category: 'movement', name: '汽车驾驶', base: 20, note: 'Drive Auto' },
+  { category: 'movement', name: '驾驶', base: 20, note: 'Drive' },
+  { category: 'movement', name: '驾驶（其他）', base: 1, detail: '载具类型', detailPlaceholder: '飞机', detailMode: 'vehicle', note: 'Pilot / 其他载具' },
+  { category: 'movement', name: '骑术', base: 5, note: 'Ride' },
+  { category: 'movement', name: '动物驯养', base: 5, note: 'Animal Handling' },
+  { category: 'movement', name: '驯兽', base: 5, note: '动物驯养旧译' },
+
+  // 战斗
+  { category: 'combat', name: '闪避', base: 0, note: '基础值 = DEX/2' },
+  { category: 'combat', name: '斗殴', base: 25, note: 'Fighting (Brawl)' },
+  { category: 'combat', name: '格斗（斗殴）', base: 25, note: 'Fighting (Brawl)' },
+  { category: 'combat', name: '格斗（剑）', base: 15, note: 'Fighting (Sword)' },
+  { category: 'combat', name: '格斗（斧）', base: 15, note: 'Fighting (Axe)' },
+  { category: 'combat', name: '格斗（矛）', base: 15, note: 'Fighting (Spear)' },
+  { category: 'combat', name: '格斗（鞭）', base: 15, note: 'Fighting (Whip)' },
+  { category: 'combat', name: '格斗（连枷）', base: 15, note: 'Fighting (Flail)' },
+  { category: 'combat', name: '格斗（链锯）', base: 15, note: 'Fighting (Chainsaw)' },
+  { category: 'combat', name: '格斗（小刀）', base: 15, note: 'Fighting (Knife)' },
+  { category: 'combat', name: '格斗（擒抱）', base: 25, note: 'Fighting (Grapple)' },
+  { category: 'combat', name: '格斗（其他）', base: 15, detail: '武器/流派', detailPlaceholder: '长棍', note: '自定义格斗' },
+  { category: 'combat', name: '射击（手枪）', base: 20, note: 'Firearms (Handgun)' },
+  { category: 'combat', name: '射击（步枪/霰弹枪）', base: 25, note: 'Firearms (Rifle/Shotgun)' },
+  { category: 'combat', name: '射击（冲锋枪）', base: 15, note: '可选' },
+  { category: 'combat', name: '射击（机枪）', base: 15, note: '可选' },
+  { category: 'combat', name: '射击（弓）', base: 15, note: '可选' },
+  { category: 'combat', name: '射击（十字弓）', base: 15, note: '可选' },
+  { category: 'combat', name: '射击（重武器）', base: 10, note: '可选' },
+  { category: 'combat', name: '射击（火焰喷射器）', base: 10, note: '可选' },
+  { category: 'combat', name: '射击（其他）', base: 15, detail: '枪种', detailPlaceholder: '机枪', note: '自定义射击' },
+  { category: 'combat', name: '投掷', base: 20, note: 'Throw' },
+  { category: 'combat', name: '炮术', base: 1, note: 'Artillery，可选' },
+
+  // 可选 / 扩展
+  { category: 'optional', name: '冲锋枪', base: 15, note: '可替代「射击（冲锋枪）」' },
+  { category: 'optional', name: '重武器', base: 10, note: '可选' },
+  { category: 'optional', name: '火焰喷射器', base: 10, note: '可选' },
+]);
+
 /**
  * 常见技能基础值。未收录的自定义技能以 1 为基础。
  * 闪避与母语依赖属性，在 baseSkillValue 中单独计算。
  */
-export const SKILL_BASE = Object.freeze({
-  会计: 5,
-  人类学: 1,
-  估价: 5,
-  考古学: 1,
-  艺术: 5,
-  摄影: 5,
-  话术: 5,
-  攀爬: 20,
-  信用评级: 0,
-  克苏鲁神话: 0,
-  乔装: 5,
-  闪避: 0,
-  驾驶: 20,
-  电气维修: 10,
-  电子学: 1,
-  历史: 5,
-  急救: 30,
-  恐吓: 15,
-  跳跃: 20,
-  法律: 5,
-  图书馆使用: 20,
-  聆听: 20,
-  锁匠: 1,
-  机械维修: 10,
-  医学: 1,
-  博物学: 10,
-  导航: 10,
-  神秘学: 5,
-  操作重型机械: 1,
-  说服: 10,
-  心理学: 10,
-  心理分析: 1,
-  骑术: 5,
-  科学: 1,
-  妙手: 10,
-  侦查: 25,
-  潜行: 20,
-  生存: 10,
-  游泳: 20,
-  投掷: 20,
-  追踪: 10,
-  潜水: 1,
-  爆破: 1,
-  炮术: 1,
-  斗殴: 25,
-  '射击（手枪）': 20,
-  '射击（步枪/霰弹枪）': 25,
-});
+export const SKILL_BASE = Object.freeze(
+  Object.fromEntries(SKILL_CATALOG.map((skill) => [skill.name, skill.base]))
+);
 
 /**
  * 内置职业模板。技能点按本项目统一口径 EDU×2。
@@ -321,9 +398,24 @@ export function calculateDerived(attributes, age = 30) {
 }
 
 export function baseSkillValue(name, attributes) {
-  if (name === '闪避') return Math.floor((Number(attributes?.dex) || 0) / 2);
-  if (name === '母语') return Math.max(0, Math.floor(Number(attributes?.edu) || 0));
-  return SKILL_BASE[name] ?? 1;
+  const key = String(name || '').trim();
+  if (key === '闪避') return Math.floor((Number(attributes?.dex) || 0) / 2);
+  if (key === '母语') return Math.max(0, Math.floor(Number(attributes?.edu) || 0));
+  if (SKILL_BASE[key] !== undefined) return SKILL_BASE[key];
+  // 带子类的技能：与目录中的基础技能保持同一基础值。
+  if (key.startsWith('科学（')) return 1;
+  if (key.startsWith('技艺（') || key.startsWith('艺术（')) return 5;
+  if (key.startsWith('语言（')) return 1;
+  if (key.startsWith('生存（')) return 10;
+  if (key.startsWith('驾驶（')) return 1;
+  if (key.startsWith('格斗（')) return /斗殴|擒抱|徒手/.test(key) ? 25 : 15;
+  if (key.startsWith('射击（')) {
+    if (/手枪/.test(key)) return 20;
+    if (/步枪|霰弹|步\/霰/.test(key)) return 25;
+    if (/重武器|火焰喷射器/.test(key)) return 10;
+    return 15;
+  }
+  return 1;
 }
 
 /* =========================================================
@@ -811,6 +903,9 @@ export function buildAutoCharacterMessages({ persona, occupationId, age }) {
 2. 年龄修正由程序完成，你不要在 attributes 中预先加减。当前年龄 ${age}，档位 ${ageBracket(age)}，修正为：
    STR ${modifier.str} / CON ${modifier.con} / DEX ${modifier.dex} / APP ${modifier.app} / EDU ${modifier.edu} / MOV ${modifier.mov}。
 3. 职业固定为「${occupation.name}」。本职技能只可使用：${occupation.skills.join('、') || '由 KP 自定义'}。
+   兴趣技能优先使用标准技能表；带子类的必须写全，例如「科学（生物学）」「语言（拉丁语）」「射击（手枪）」「格斗（剑）」「生存（荒野）」。标准技能表：${[
+     ...new Set(SKILL_CATALOG.map((skill) => skill.name)),
+   ].join('、')}。
 4. 程序会先计算总预算：职业点 = 最终 EDU×2，兴趣点 = 最终 INT×2。技能分配不需要你手工凑满；程序会从总额出发精确分配。
 5. skills 中的 occupation / interest 是“目标点数/相对权重”，不是最终校验值；程序会保留你的倾向，并在预算不足或超额时自动缩放、补齐。不要填写基础值或 total。
 6. 职业点只能分配给本职技能；兴趣点可以分配给任何合理技能。尽量列出 8–14 个与人设相关的技能，不要只列一两个。

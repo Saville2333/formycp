@@ -8,6 +8,8 @@ import {
   ATTRIBUTE_META,
   ATTRIBUTE_KEYS,
   OCCUPATIONS,
+  SKILL_CATALOG,
+  SKILL_CATEGORIES,
   ageBracket,
   applyBuildToCharacter,
   baseSkillValue,
@@ -345,6 +347,50 @@ function renderSkillRows() {
     .join('');
 }
 
+function skillCatalogIndex() {
+  const seen = new Set();
+  return SKILL_CATALOG.map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => {
+      if (seen.has(entry.name)) return false;
+      seen.add(entry.name);
+      return true;
+    });
+}
+
+function renderSkillPickerList(filter = '', category = 'all') {
+  const query = String(filter || '').trim().toLowerCase();
+  const rows = skillCatalogIndex().filter(({ entry }) => {
+    if (category !== 'all' && entry.category !== category) return false;
+    if (!query) return true;
+    return `${entry.name} ${entry.note || ''}`.toLowerCase().includes(query);
+  });
+  if (!rows.length) return '<p class="empty-hint">没有匹配的技能。</p>';
+  return SKILL_CATEGORIES.map((group) => {
+    const groupRows = rows.filter(({ entry }) => entry.category === group.id);
+    if (!groupRows.length) return '';
+    return `<section class="skill-picker__group">
+      <h4 class="skill-picker__heading">${escapeHTML(group.name)} <span>${groupRows.length}</span></h4>
+      <div class="skill-picker__rows">
+        ${groupRows
+          .map(({ entry, index }) => {
+            const owned = draft.skills.some((skill) => skill.name === entry.name);
+            return `<div class="skill-picker__row">
+              <div class="skill-picker__body">
+                <strong>${escapeHTML(entry.name)}</strong>
+                ${entry.note ? `<small>${escapeHTML(entry.note)}</small>` : ''}
+              </div>
+              <span class="skill-picker__base">${entry.base}%</span>
+              <button class="btn btn--ghost btn--sm" type="button" data-add-catalog-skill="${index}" ${
+                owned ? 'disabled title="已在技能表中"' : ''
+              }>${owned ? '已有' : entry.detail ? '选择子类' : '添加'}</button>
+            </div>`;
+          })
+          .join('')}
+      </div>
+    </section>`;
+  }).join('');
+}
+
 function derivedTile(label, value, key) {
   return `<div class="derived-tile">
     <span class="derived-tile__label">${escapeHTML(label)}</span>
@@ -537,6 +583,9 @@ function renderBuilder() {
             </table>
           </div>
           <div class="builder-inline-actions">
+            <button class="btn btn--gold btn--sm" type="button" data-action="open-skill-picker">${icon(
+              'search'
+            )} 从技能表添加</button>
             <button class="btn btn--ghost btn--sm" type="button" data-action="add-custom-skill">${icon(
               'plus'
             )} 添加自定义技能</button>
@@ -1180,6 +1229,90 @@ export const characterView = {
         duration: 4800,
       });
       ctx.navigate('#/characters');
+    },
+
+    async 'open-skill-picker'(element, ctx) {
+      const body = document.createElement('div');
+      body.innerHTML = `<div class="skill-picker">
+        <div class="skill-picker__filters">
+          <label class="form-field">
+            <span class="form-field__label">搜索技能</span>
+            <input class="form-input" id="skill-picker-search" placeholder="侦查、科学、射击、语言……">
+          </label>
+          <label class="form-field">
+            <span class="form-field__label">分类</span>
+            <select class="form-input" id="skill-picker-category">
+              <option value="all">全部技能</option>
+              ${SKILL_CATEGORIES.map(
+                (category) =>
+                  `<option value="${escapeHTML(category.id)}">${escapeHTML(category.name)}</option>`
+              ).join('')}
+            </select>
+          </label>
+        </div>
+        <p class="form-help">带子类的技能会要求填写学科、语种、环境、载具或武器类型；添加后仍可分配职业点/兴趣点。</p>
+        <div class="skill-picker__list" id="skill-picker-list">${renderSkillPickerList()}</div>
+      </div>`;
+      openModal({
+        eyebrow: 'Skill Catalog',
+        title: '从技能表添加',
+        body,
+        wide: true,
+        footer: `<div class="modal-actions"><button class="btn btn--ghost" type="button" data-close-dialog>关闭</button></div>`,
+        onMount: (dialog) => {
+          const list = dialog.querySelector('#skill-picker-list');
+          const paint = () => {
+            if (!list) return;
+            list.innerHTML = renderSkillPickerList(
+              dialog.querySelector('#skill-picker-search')?.value || '',
+              dialog.querySelector('#skill-picker-category')?.value || 'all'
+            );
+          };
+          dialog.querySelector('#skill-picker-search')?.addEventListener('input', paint);
+          dialog.querySelector('#skill-picker-category')?.addEventListener('change', paint);
+          list?.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-add-catalog-skill]');
+            if (!button) return;
+            const entry = SKILL_CATALOG[Number(button.dataset.addCatalogSkill)];
+            if (!entry) return;
+            let name = entry.name;
+            if (entry.detail) {
+              const detail = window.prompt(
+                `请填写${entry.detail}（例如：${entry.detailPlaceholder || '自定义'}）`,
+                entry.detailPlaceholder || ''
+              );
+              if (detail === null) return;
+              const clean = detail.trim();
+              if (!clean) {
+                toast(`请填写${entry.detail}。`, { type: 'warning' });
+                return;
+              }
+              const baseName =
+                entry.detailMode === 'language'
+                  ? '语言'
+                  : entry.name.replace(/（其他）$/, '');
+              name = `${baseName}（${clean}）`;
+            }
+            if (draft.skills.some((skill) => skill.name === name)) {
+              toast(`「${name}」已经在技能表里了。`, { type: 'info' });
+              return;
+            }
+            const base = baseSkillValue(name, draft.attributes) || entry.base || 1;
+            draft.skills.push({
+              name,
+              base,
+              occupation: 0,
+              interest: 0,
+              total: base,
+              checked: false,
+            });
+            closeModal();
+            ctx.refresh();
+            toast(`已添加「${name}」，基础值 ${base}%。`, { type: 'success' });
+          });
+        },
+      });
+      setTimeout(() => document.getElementById('skill-picker-search')?.focus(), 50);
     },
 
     async 'add-custom-skill'(element, ctx) {

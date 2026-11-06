@@ -3232,6 +3232,86 @@ svg {
   margin-right: 5px;
 }
 
+.skill-picker {
+  display: grid;
+  gap: 12px;
+}
+
+.skill-picker__filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 10px;
+}
+
+.skill-picker__list {
+  display: grid;
+  gap: 15px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.skill-picker__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 7px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(185, 154, 91, 0.14);
+  color: var(--gold-dim);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
+
+.skill-picker__heading span {
+  color: var(--faint);
+}
+
+.skill-picker__rows {
+  display: grid;
+  border: 1px solid rgba(184, 154, 93, 0.1);
+}
+
+.skill-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 9px;
+  border-bottom: 1px solid rgba(184, 154, 93, 0.07);
+}
+
+.skill-picker__row:last-child {
+  border-bottom: 0;
+}
+
+.skill-picker__body {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+.skill-picker__body strong {
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.skill-picker__body small {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-picker__base {
+  color: var(--gold);
+  font-family: var(--font-mono);
+  font-size: 8px;
+}
+
 .table-input {
   width: 58px;
   padding: 4px 5px;
@@ -5906,6 +5986,14 @@ svg {
 @media (max-width: 760px) {
   :root {
     --topbar-h: 62px;
+  }
+
+  .skill-picker__filters {
+    grid-template-columns: 1fr;
+  }
+
+  .skill-picker__list {
+    max-height: 58vh;
   }
 
   .view {
