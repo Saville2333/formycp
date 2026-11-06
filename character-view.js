@@ -386,7 +386,7 @@ function renderSkillPickerList(filter = '', category = 'all') {
                 <strong>${escapeHTML(entry.name)}</strong>
                 ${entry.note ? `<small>${escapeHTML(entry.note)}</small>` : ''}
               </div>
-              <span class="skill-picker__base">${entry.base}%</span>
+              <span class="skill-picker__base">${baseSkillValue(entry.name, draft.attributes)}%</span>
               <button class="btn btn--ghost btn--sm" type="button" data-add-catalog-skill="${index}" ${
                 owned ? 'disabled title="已在技能表中"' : ''
               }>${owned ? '已有' : entry.detail ? '选择子类' : '添加'}</button>

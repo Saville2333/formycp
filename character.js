@@ -107,12 +107,25 @@ export const SKILL_CATALOG = Object.freeze([
   { category: 'knowledge', name: '气象学', base: 1, note: '科学子类' },
   { category: 'knowledge', name: '司法科学', base: 1, note: '科学子类，可选' },
   { category: 'knowledge', name: '药学', base: 1, note: '科学子类，可选' },
+  { category: 'knowledge', name: '科学（化学）', base: 1, note: '科学子类' },
+  { category: 'knowledge', name: '科学（物理学）', base: 1, note: '科学子类' },
+  { category: 'knowledge', name: '科学（天文学）', base: 1, note: '科学子类' },
+  { category: 'knowledge', name: '科学（地质学）', base: 1, note: '科学子类' },
+  { category: 'knowledge', name: '科学（数学）', base: 1, note: '科学子类' },
+  { category: 'knowledge', name: '科学（工程学）', base: 1, note: '科学子类' },
+  { category: 'knowledge', name: '科学（计算机科学）', base: 1, note: '科学子类' },
   { category: 'knowledge', name: '母语', base: 0, note: '基础值 = EDU' },
+  { category: 'knowledge', name: '语言（母语）', base: 0, note: '基础值 = EDU' },
   { category: 'knowledge', name: '语言（其他）', base: 1, detail: '语种', detailPlaceholder: '拉丁语', detailMode: 'language', note: 'Language (Other)' },
   { category: 'knowledge', name: '拉丁语', base: 1, note: '语言子类' },
   { category: 'knowledge', name: '英语', base: 1, note: '语言子类' },
   { category: 'knowledge', name: '法语', base: 1, note: '语言子类' },
   { category: 'knowledge', name: '德语', base: 1, note: '语言子类' },
+  { category: 'knowledge', name: '希腊语', base: 1, note: '语言子类' },
+  { category: 'knowledge', name: '希伯来语', base: 1, note: '语言子类' },
+  { category: 'knowledge', name: '阿拉伯语', base: 1, note: '语言子类' },
+  { category: 'knowledge', name: '汉语', base: 1, note: '语言子类' },
+  { category: 'knowledge', name: '日语', base: 1, note: '语言子类' },
 
   // 医疗与精神
   { category: 'medical', name: '急救', base: 30, note: 'First Aid' },
@@ -128,6 +141,16 @@ export const SKILL_CATALOG = Object.freeze([
   { category: 'technical', name: '摄影', base: 5, note: '技艺子类' },
   { category: 'technical', name: '伪造', base: 5, note: '技艺子类' },
   { category: 'technical', name: '表演', base: 5, note: '技艺子类，可选' },
+  { category: 'technical', name: '技艺（绘画）', base: 5, note: '技艺子类' },
+  { category: 'technical', name: '技艺（雕塑）', base: 5, note: '技艺子类' },
+  { category: 'technical', name: '技艺（写作）', base: 5, note: '技艺子类' },
+  { category: 'technical', name: '技艺（乐器）', base: 5, note: '技艺子类' },
+  { category: 'technical', name: '技艺（歌唱）', base: 5, note: '技艺子类' },
+  { category: 'technical', name: '技艺（舞蹈）', base: 5, note: '技艺子类' },
+  { category: 'technical', name: '技艺（木工）', base: 5, note: '技艺子类' },
+  { category: 'technical', name: '技艺（摄影）', base: 5, note: '技艺子类' },
+  { category: 'technical', name: '技艺（伪造）', base: 5, note: '技艺子类' },
+  { category: 'technical', name: '技艺（表演）', base: 5, note: '技艺子类' },
   { category: 'technical', name: '锁匠', base: 1, note: 'Locksmith' },
   { category: 'technical', name: '妙手', base: 10, note: 'Sleight of Hand' },
   { category: 'technical', name: '机械维修', base: 10, note: 'Mechanical Repair' },
@@ -144,9 +167,18 @@ export const SKILL_CATALOG = Object.freeze([
   { category: 'movement', name: '潜水', base: 1, note: 'Scuba，扩展' },
   { category: 'movement', name: '潜行', base: 20, note: 'Stealth' },
   { category: 'movement', name: '生存', base: 10, detail: '环境', detailPlaceholder: '荒野', note: 'Survival' },
+  { category: 'movement', name: '生存（荒野）', base: 10, note: '生存子类' },
+  { category: 'movement', name: '生存（沙漠）', base: 10, note: '生存子类' },
+  { category: 'movement', name: '生存（海洋）', base: 10, note: '生存子类' },
+  { category: 'movement', name: '生存（极地）', base: 10, note: '生存子类' },
+  { category: 'movement', name: '生存（城市）', base: 10, note: '生存子类' },
   { category: 'movement', name: '导航', base: 10, note: 'Navigate' },
   { category: 'movement', name: '汽车驾驶', base: 20, note: 'Drive Auto' },
   { category: 'movement', name: '驾驶', base: 20, note: 'Drive' },
+  { category: 'movement', name: '驾驶（汽车）', base: 20, note: '驾驶子类' },
+  { category: 'movement', name: '驾驶（摩托车）', base: 20, note: '驾驶子类' },
+  { category: 'movement', name: '驾驶（船舶）', base: 1, note: '驾驶子类' },
+  { category: 'movement', name: '驾驶（飞机）', base: 1, note: '驾驶子类' },
   { category: 'movement', name: '驾驶（其他）', base: 1, detail: '载具类型', detailPlaceholder: '飞机', detailMode: 'vehicle', note: 'Pilot / 其他载具' },
   { category: 'movement', name: '骑术', base: 5, note: 'Ride' },
   { category: 'movement', name: '动物驯养', base: 5, note: 'Animal Handling' },
@@ -163,10 +195,17 @@ export const SKILL_CATALOG = Object.freeze([
   { category: 'combat', name: '格斗（连枷）', base: 15, note: 'Fighting (Flail)' },
   { category: 'combat', name: '格斗（链锯）', base: 15, note: 'Fighting (Chainsaw)' },
   { category: 'combat', name: '格斗（小刀）', base: 15, note: 'Fighting (Knife)' },
+  { category: 'combat', name: '格斗（徒手）', base: 25, note: 'Fighting (Unarmed)' },
   { category: 'combat', name: '格斗（擒抱）', base: 25, note: 'Fighting (Grapple)' },
+  { category: 'combat', name: '格斗（徒手擒抱）', base: 25, note: 'Fighting (Grapple)' },
+  { category: 'combat', name: '格斗（盾牌）', base: 15, note: 'Fighting (Shield)' },
   { category: 'combat', name: '格斗（其他）', base: 15, detail: '武器/流派', detailPlaceholder: '长棍', note: '自定义格斗' },
   { category: 'combat', name: '射击（手枪）', base: 20, note: 'Firearms (Handgun)' },
+  { category: 'combat', name: '射击（左轮）', base: 20, note: 'Firearms (Revolver)' },
+  { category: 'combat', name: '射击（步枪）', base: 25, note: 'Firearms (Rifle)' },
+  { category: 'combat', name: '射击（霰弹枪）', base: 25, note: 'Firearms (Shotgun)' },
   { category: 'combat', name: '射击（步枪/霰弹枪）', base: 25, note: 'Firearms (Rifle/Shotgun)' },
+  { category: 'combat', name: '射击（步/霰）', base: 25, note: '步枪/霰弹枪简写' },
   { category: 'combat', name: '射击（冲锋枪）', base: 15, note: '可选' },
   { category: 'combat', name: '射击（机枪）', base: 15, note: '可选' },
   { category: 'combat', name: '射击（弓）', base: 15, note: '可选' },
@@ -400,7 +439,9 @@ export function calculateDerived(attributes, age = 30) {
 export function baseSkillValue(name, attributes) {
   const key = String(name || '').trim();
   if (key === '闪避') return Math.floor((Number(attributes?.dex) || 0) / 2);
-  if (key === '母语') return Math.max(0, Math.floor(Number(attributes?.edu) || 0));
+  if (key === '母语' || key === '语言（母语）') {
+    return Math.max(0, Math.floor(Number(attributes?.edu) || 0));
+  }
   if (SKILL_BASE[key] !== undefined) return SKILL_BASE[key];
   // 带子类的技能：与目录中的基础技能保持同一基础值。
   if (key.startsWith('科学（')) return 1;
@@ -410,7 +451,7 @@ export function baseSkillValue(name, attributes) {
   if (key.startsWith('驾驶（')) return 1;
   if (key.startsWith('格斗（')) return /斗殴|擒抱|徒手/.test(key) ? 25 : 15;
   if (key.startsWith('射击（')) {
-    if (/手枪/.test(key)) return 20;
+    if (/手枪|左轮/.test(key)) return 20;
     if (/步枪|霰弹|步\/霰/.test(key)) return 25;
     if (/重武器|火焰喷射器/.test(key)) return 10;
     return 15;
