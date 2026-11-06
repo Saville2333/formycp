@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cthulhu-table.local/schemas/session.schema.json",
+  "title": "Cthulhu Table Session",
+  "description": "一场战役（会话）的元数据与 KP 内部状态。聊天正文单独存放于 IndexedDB。",
+  "type": "object",
+  "required": [
+    "id",
+    "schemaVersion",
+    "title",
+    "status",
+    "moduleId",
+    "playerCharacterIds",
+    "kpState",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{3,80}$" },
+    "schemaVersion": { "const": 1 },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "status": { "enum": ["setup", "active", "paused", "completed"] },
+    "moduleId": { "type": "string", "maxLength": 80 },
+    "moduleTitle": { "type": "string", "maxLength": 300 },
+    "playerCharacterIds": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 80 }
+    },
+    "npcIds": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 80 }
+    },
+    "chatIds": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 80 }
+    },
+    "povCharacterId": {
+      "type": "string",
+      "maxLength": 80,
+      "description": "玩家亲自扮演的调查员；其余 PL 由 AI 扮演。"
+    },
+    "roleAssignments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["roleId", "characterId", "code", "title"],
+        "properties": {
+          "roleId": { "type": "string", "maxLength": 80 },
+          "characterId": { "type": "string", "maxLength": 80 },
+          "code": { "type": "string", "maxLength": 40 },
+          "title": { "type": "string", "maxLength": 300 },
+          "summary": { "type": "string", "maxLength": 2000 },
+          "publicInfo": { "type": "string", "maxLength": 8000 },
+          "privateInfo": { "type": "string", "maxLength": 16000 },
+          "persona": { "type": "string", "maxLength": 24000 },
+          "goals": { "type": "array", "items": { "type": "string", "maxLength": 500 } },
+          "ending": { "type": "string", "maxLength": 8000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "privateNotes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "characterId", "content"],
+        "properties": {
+          "id": { "type": "string", "maxLength": 80 },
+          "characterId": { "type": "string", "maxLength": 80 },
+          "roleId": { "type": "string", "maxLength": 80 },
+          "title": { "type": "string", "maxLength": 300 },
+          "content": { "type": "string", "maxLength": 16000 },
+          "source": { "enum": ["role", "keeper", "clue", "manual"] },
+          "visibility": { "const": "private" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "openingPending": { "type": "boolean" },
+    "memoryChoice": { "enum": ["", "engrave", "discard"] },
+    "ending": {
+      "type": ["object", "null"],
+      "properties": {
+        "title": { "type": "string", "maxLength": 300 },
+        "text": { "type": "string", "maxLength": 4000 },
+        "povFate": { "type": "string", "maxLength": 1000 },
+        "at": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "activeChapterId": { "type": "string", "maxLength": 80 },
+    "activeSceneId": { "type": "string", "maxLength": 80 },
+    "kpState": {
+      "type": "object",
+      "required": [
+        "currentChapterId",
+        "currentSceneId",
+        "visitedSceneIds",
+        "discoveredClueIds",
+        "triggeredEventIds",
+        "npcAttitudes",
+        "timeline",
+        "unlockedContent",
+        "flags"
+      ],
+      "properties": {
+        "currentChapterId": { "type": ["string", "null"], "maxLength": 80 },
+        "currentSceneId": { "type": ["string", "null"], "maxLength": 80 },
+        "visitedSceneIds": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 80 }
+        },
+        "discoveredClueIds": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 80 }
+        },
+        "triggeredEventIds": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 80 }
+        },
+        "npcAttitudes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "attitude": { "type": "string", "maxLength": 200 },
+              "notes": { "type": "string", "maxLength": 2000 },
+              "lastInteraction": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "timeline": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["inGameTime", "summary"],
+            "properties": {
+              "inGameTime": { "type": "string", "maxLength": 100 },
+              "summary": { "type": "string", "maxLength": 2000 },
+              "createdAt": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "unlockedContent": {
+          "type": "object",
+          "required": ["chapterIds", "sceneIds", "clueIds"],
+          "properties": {
+            "chapterIds": {
+              "type": "array",
+              "items": { "type": "string", "maxLength": 80 }
+            },
+            "sceneIds": {
+              "type": "array",
+              "items": { "type": "string", "maxLength": 80 }
+            },
+            "clueIds": {
+              "type": "array",
+              "items": { "type": "string", "maxLength": 80 }
+            }
+          },
+          "additionalProperties": false
+        },
+        "flags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean", "null"]
+          }
+        },
+        "lastKeeperSummary": { "type": "string", "maxLength": 8000 },
+        "nextHint": { "type": "string", "maxLength": 120 }
+      },
+      "additionalProperties": true
+    },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "contextRounds": { "type": "integer", "minimum": 2, "maximum": 50 },
+        "retrievalTopK": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "narrativeMin": { "type": "integer", "minimum": 50, "maximum": 1000 },
+        "narrativeMax": { "type": "integer", "minimum": 100, "maximum": 2000 },
+        "showInternalState": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "lastPlayedAt": { "type": ["string", "null"], "format": "date-time" }
+  },
+  "additionalProperties": true
+}

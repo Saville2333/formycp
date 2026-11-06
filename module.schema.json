@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cthulhu-table.local/schemas/module.schema.json",
+  "title": "Cthulhu Table Module",
+  "description": "导入后的模组档案：原文、结构树、检索分块、线索、NPC 与必须触发事件。",
+  "type": "object",
+  "required": [
+    "id",
+    "schemaVersion",
+    "title",
+    "system",
+    "source",
+    "structure",
+    "chunks",
+    "clues",
+    "npcs",
+    "events",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{3,80}$" },
+    "schemaVersion": { "const": 1 },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "system": { "const": "coc7e" },
+    "author": { "type": "string", "maxLength": 200 },
+    "version": { "type": "string", "maxLength": 80 },
+    "language": { "type": "string", "maxLength": 40, "default": "zh-CN" },
+    "description": { "type": "string", "maxLength": 8000 },
+    "contentWarnings": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "type": "string", "maxLength": 100 }
+    },
+    "source": {
+      "type": "object",
+      "required": ["type", "importedAt"],
+      "properties": {
+        "type": { "enum": ["txt", "md", "json", "paste"] },
+        "fileName": { "type": "string", "maxLength": 300 },
+        "importedAt": { "type": "string", "format": "date-time" },
+        "rawText": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "structure": {
+      "type": "object",
+      "required": ["chapters"],
+      "properties": {
+        "chapters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/chapter" }
+        },
+        "unassignedText": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "chunks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/chunk" }
+    },
+    "clues": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/clue" }
+    },
+    "npcs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/npc" }
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/event" }
+    },
+    "roles": {
+      "type": "array",
+      "description": "模组中的 HO / PC 身份位，用于跑团开始时分配给调查员。",
+      "items": {
+        "type": "object",
+        "required": ["id", "code", "title"],
+        "properties": {
+          "id": { "type": "string", "maxLength": 80 },
+          "code": { "type": "string", "maxLength": 40 },
+          "title": { "type": "string", "maxLength": 300 },
+          "summary": { "type": "string", "maxLength": 2000 },
+          "publicInfo": { "type": "string", "maxLength": 8000 },
+          "privateInfo": { "type": "string", "maxLength": 16000 },
+          "persona": { "type": "string", "maxLength": 24000 },
+          "goals": { "type": "array", "items": { "type": "string", "maxLength": 500 } },
+          "ending": { "type": "string", "maxLength": 8000 },
+          "description": { "type": "string", "maxLength": 24000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "retrieval": {
+      "type": "object",
+      "properties": {
+        "method": { "enum": ["keyword", "tfidf", "hybrid"] },
+        "index": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "builtAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "aiAudit": {
+      "type": "object",
+      "properties": {
+        "version": { "type": "integer", "minimum": 1 },
+        "verdict": { "enum": ["ok", "warning", "error"] },
+        "summary": { "type": "string", "maxLength": 2000 },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "maxLength": 40 },
+              "message": { "type": "string", "maxLength": 1000 },
+              "sceneTitle": { "type": "string", "maxLength": 300 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "keyClues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "clueId": { "type": "string" },
+              "title": { "type": "string" },
+              "reason": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "mustTriggerEvents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "eventId": { "type": "string" },
+              "title": { "type": "string" },
+              "reason": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "sceneIssues": { "type": "array", "items": { "type": "object" } },
+        "provider": { "type": "string", "maxLength": 100 },
+        "model": { "type": "string", "maxLength": 200 },
+        "truncated": { "type": "boolean" },
+        "charsAudited": { "type": "integer", "minimum": 0 },
+        "checkedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "estimatedDuration": { "type": "string", "maxLength": 100 },
+        "playerCount": { "type": "string", "maxLength": 50 },
+        "keeperNotes": { "type": "string", "maxLength": 20000 }
+      },
+      "additionalProperties": false
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "chapter": {
+      "type": "object",
+      "required": ["id", "title", "order", "scenes"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 80 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "order": { "type": "integer", "minimum": 0 },
+        "summary": { "type": "string", "maxLength": 8000 },
+        "unlocked": { "type": "boolean" },
+        "scenes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/scene" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "scene": {
+      "type": "object",
+      "required": ["id", "title", "order"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 80 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "order": { "type": "integer", "minimum": 0 },
+        "summary": { "type": "string", "maxLength": 8000 },
+        "readAloud": { "type": "string", "maxLength": 12000 },
+        "content": { "type": "string" },
+        "clueIds": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 80 }
+        },
+        "npcIds": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 80 }
+        },
+        "eventIds": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 80 }
+        },
+        "isKeyScene": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "chunk": {
+      "type": "object",
+      "required": ["id", "text", "order"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 80 },
+        "title": { "type": "string", "maxLength": 300 },
+        "chapterId": { "type": "string", "maxLength": 80 },
+        "sceneId": { "type": "string", "maxLength": 80 },
+        "text": { "type": "string" },
+        "keywords": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "maxLength": 80 }
+        },
+        "tokenEstimate": { "type": "integer", "minimum": 0 },
+        "order": { "type": "integer", "minimum": 0 },
+        "mustNotLeakBeforeUnlock": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "clue": {
+      "type": "object",
+      "required": ["id", "title", "description", "isKey", "revealed"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 80 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "description": { "type": "string" },
+        "sceneId": { "type": "string", "maxLength": 80 },
+        "chapterId": { "type": "string", "maxLength": 80 },
+        "type": { "enum": ["document", "testimony", "physical", "observation", "other"] },
+        "isKey": { "type": "boolean" },
+        "revealed": { "type": "boolean" },
+        "revealCondition": { "type": "string", "maxLength": 2000 },
+        "notes": { "type": "string", "maxLength": 4000 }
+      },
+      "additionalProperties": false
+    },
+    "npc": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 80 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "role": { "type": "string", "maxLength": 300 },
+        "attitude": { "type": "string", "maxLength": 300 },
+        "description": { "type": "string", "maxLength": 12000 },
+        "secrets": { "type": "string", "maxLength": 12000 },
+        "sceneIds": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 80 }
+        },
+        "characterId": { "type": "string", "maxLength": 80 }
+      },
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "object",
+      "required": ["id", "title", "mustTrigger", "triggered"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 80 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "description": { "type": "string", "maxLength": 8000 },
+        "chapterId": { "type": "string", "maxLength": 80 },
+        "sceneId": { "type": "string", "maxLength": 80 },
+        "mustTrigger": { "type": "boolean" },
+        "triggerCondition": { "type": "string", "maxLength": 4000 },
+        "triggered": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

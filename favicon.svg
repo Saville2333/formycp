@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Cthulhu Table">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="35%" r="75%">
+      <stop offset="0%" stop-color="#1c3b2d"/>
+      <stop offset="62%" stop-color="#0c1d16"/>
+      <stop offset="100%" stop-color="#050b08"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f2e2b6"/>
+      <stop offset="55%" stop-color="#c9aa69"/>
+      <stop offset="100%" stop-color="#8b713d"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="url(#bg)" stroke="#3a301f" stroke-width="1.5"/>
+  <rect x="4" y="4" width="56" height="56" rx="11" fill="none" stroke="#c9aa69" stroke-width="1" opacity=".3"/>
+
+  <circle cx="32" cy="31" r="21.5" fill="none" stroke="url(#gold)" stroke-width="2.8"/>
+  <path d="M32 8.5v3.2M32 50.3v3.2M10.5 31h3.2M50.3 31h3.2" stroke="#c9aa69" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+
+  <path d="M10.8 31c5.5-8.2 36.9-8.2 42.4 0-5.5 8.2-36.9 8.2-42.4 0Z" fill="url(#gold)" stroke="#f2e2b6" stroke-width="1"/>
+  <ellipse cx="32" cy="31" rx="4.4" ry="8.6" fill="#06100c"/>
+  <ellipse cx="32" cy="31" rx="2.2" ry="8" fill="#020705"/>
+  <circle cx="30.2" cy="27.6" r="1.35" fill="#faecc8"/>
+
+  <g fill="none" stroke="url(#gold)" stroke-width="3.2" stroke-linecap="round">
+    <path d="M23 37.5c-5.8 4.6-5.2 10.4 1 13.8 3.3 1.8 3.4 3.7 1.6 6.1"/>
+    <path d="M41 37.5c5.8 4.6 5.2 10.4-1 13.8-3.3 1.8-3.4 3.7-1.6 6.1"/>
+    <path d="M32 39v18.4"/>
+  </g>
+  <path d="m32 12.2 1.5 3 3.3.5-2.4 2.3.6 3.3-3-1.6-3 1.6.6-3.3-2.4-2.3 3.3-.5Z" fill="#d6ba7c"/>
+</svg>

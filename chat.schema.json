@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cthulhu-table.local/schemas/chat.schema.json",
+  "title": "Cthulhu Table Chat Log",
+  "description": "按战役/场景分组的聊天记录，保存在 IndexedDB。",
+  "type": "object",
+  "required": ["id", "campaignId", "title", "messages", "createdAt", "updatedAt"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{3,80}$" },
+    "campaignId": { "type": "string", "maxLength": 80 },
+    "characterId": { "type": "string", "maxLength": 80 },
+    "sceneId": { "type": "string", "maxLength": 80 },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "role", "content", "createdAt"],
+        "properties": {
+          "id": { "type": "string", "maxLength": 80 },
+          "role": { "enum": ["user", "assistant", "system", "dice", "tool"] },
+          "content": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "speaker": { "type": "string", "maxLength": 100 },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "dice": { "type": "object" },
+              "check": { "type": "object" },
+              "model": { "type": "string", "maxLength": 200 },
+              "tokens": { "type": "integer", "minimum": 0 },
+              "durationMs": { "type": "integer", "minimum": 0 },
+              "hidden": { "type": "boolean" }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}
